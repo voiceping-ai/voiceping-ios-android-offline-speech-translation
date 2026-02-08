@@ -4,7 +4,14 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Translate icon: "A" on left, Japanese character on right, with arrows -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,36 C54,36 54,36 54,36 C57.3,36 60,38.7 60,42 L60,54 C60,57.3 57.3,60 54,60 C50.7,60 48,57.3 48,54 L48,42 C48,38.7 50.7,36 54,36 Z M66,54 L66,54 C66,60.6 60.6,66 54,66 C47.4,66 42,60.6 42,54 L39,54 C39,62.3 45.3,69.2 53,69.9 L53,75 L55,75 L55,69.9 C62.7,69.2 69,62.3 69,54 L66,54 Z"/>
+        android:pathData="M36.5,42 L39.5,42 L45,58 L42.2,58 L40.9,54.5 L35,54.5 L33.7,58 L31,58 L36.5,42 Z M37.9,46 L35.9,52 L39.9,52 L37.9,46 Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M56,42 L56,45 L62,45 L62,47 L60.8,47 C60.1,49.5 58.8,51.7 57,53.3 C58.3,54.2 59.8,54.8 61.5,55.1 L60.5,57.5 C58.4,57 56.5,56.1 55,54.8 C53.5,56.1 51.6,57 49.5,57.5 L48.5,55.1 C50.2,54.8 51.7,54.2 53,53.3 C51.6,51.9 50.5,50.2 49.8,48.2 L52,47.5 C52.5,49 53.3,50.3 54.4,51.4 C55.7,50.1 56.6,48.5 57,46.7 L50,46.7 L50,45 L56,45 L56,42 Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,60 L50,60 L50,62 L46,62 Z M48,56 L46,60 L50,60 L48,56 Z"/>
 </vector>
