@@ -1,0 +1,74 @@
+# === macOS ===
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# === Xcode ===
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode auto-generated but regeneratable via xcodegen
+OfflineTranscription.xcodeproj/project.pbxproj
+
+# Swift Package Manager
+.swiftpm/xcode/xcuserdata/
+Package.resolved
+
+# === Android ===
+OfflineTranscriptionAndroid/.gradle/
+OfflineTranscriptionAndroid/build/
+OfflineTranscriptionAndroid/app/build/
+OfflineTranscriptionAndroid/local.properties
+OfflineTranscriptionAndroid/.cxx/
+OfflineTranscriptionAndroid/app/.cxx/
+OfflineTranscriptionAndroid/captures/
+OfflineTranscriptionAndroid/.kotlin/
+
+# Android Studio / IntelliJ
+OfflineTranscriptionAndroid/.idea/
+*.iml
+
+# sherpa-onnx binaries (download from GitHub releases, see README)
+OfflineTranscriptionAndroid/app/libs/*.aar
+LocalPackages/SherpaOnnxKit/*.xcframework/
+
+# === IDE ===
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+
+# === Secrets / Environment ===
+.env
+.env.*
+*.keystore
+*.jks
+*.p12
+*.pem
+*.key
+google-services.json
+GoogleService-Info.plist
+
+# === Test Evidence / Screenshots ===
+artifacts/
+screenshots/
+
+# === Room Schema Exports (using manual migrations) ===
+OfflineTranscriptionAndroid/app/schemas/
+
+# === Claude Code ===
+.claude/

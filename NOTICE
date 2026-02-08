@@ -1,0 +1,106 @@
+Offline Transcription
+Copyright 2026 Akinori Nakajima
+
+This product includes software components from third-party projects.
+Those components are licensed under their respective original licenses.
+
+================================================================================
+BUNDLED LIBRARIES (compiled into the application)
+================================================================================
+
+WhisperKit
+  License: MIT
+  Source:  https://github.com/argmaxinc/WhisperKit
+
+whisper.cpp
+  License: MIT
+  Source:  https://github.com/ggml-org/whisper.cpp
+
+sherpa-onnx
+  License: Apache License 2.0
+  Source:  https://github.com/k2-fsa/sherpa-onnx
+
+FluidAudio
+  License: Apache License 2.0
+  Source:  https://github.com/FluidInference/FluidAudio
+
+ONNX Runtime
+  License: MIT
+  Source:  https://github.com/microsoft/onnxruntime
+
+swift-transformers
+  License: Apache License 2.0
+  Source:  https://github.com/huggingface/swift-transformers
+
+swift-jinja
+  License: Apache License 2.0
+  Source:  https://github.com/huggingface/swift-jinja
+
+swift-collections
+  License: Apache License 2.0
+  Source:  https://github.com/apple/swift-collections
+
+OkHttp
+  License: Apache License 2.0
+  Source:  https://github.com/square/okhttp
+
+================================================================================
+MODELS (downloaded at runtime, NOT distributed with this application)
+================================================================================
+
+The following models are downloaded on-device by the user at runtime.
+They are NOT included in this repository or application binary.
+Each model is subject to its own license terms as noted below.
+
+OpenAI Whisper (tiny, base, small, large-v3-turbo)
+  Code License:   MIT
+  Weights License: Apache License 2.0
+  Source:  https://github.com/openai/whisper
+  Weights: https://huggingface.co/openai/whisper-large-v3-turbo
+
+Moonshine (tiny, base)
+  License: MIT
+  Source:  https://github.com/moonshine-ai/moonshine
+  Weights: https://huggingface.co/UsefulSensors/moonshine-tiny
+
+SenseVoice Small (FunAudioLLM / Alibaba DAMO Academy)
+  Code License:    MIT — https://github.com/FunAudioLLM/SenseVoice/blob/main/LICENSE
+  Weights License: FunASR Model Open Source License Agreement v1.1
+                   (allows research and commercial use with attribution;
+                   see full license text at the link below)
+  Source:  https://github.com/FunAudioLLM/SenseVoice
+  Weights: https://huggingface.co/FunAudioLLM/SenseVoiceSmall
+  Model License: https://github.com/modelscope/FunASR/blob/main/MODEL_LICENSE
+
+Zipformer Transducer (k2-fsa / icefall)
+  License: Apache License 2.0
+  Source:  https://github.com/k2-fsa/icefall
+
+NVIDIA Parakeet TDT 0.6B (NeMo)
+  License: CC-BY-4.0 (Creative Commons Attribution 4.0)
+  Note:    Commercial use is permitted. Attribution is required.
+  Source:  https://github.com/NVIDIA/NeMo
+  Weights: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2
+
+Meta MMS / Omnilingual 300M
+  License: CC-BY-NC-4.0 (Creative Commons Attribution-NonCommercial 4.0)
+  Note:    NON-COMMERCIAL USE ONLY. This model may not be used for
+           commercial purposes. Users must comply with Meta's license terms.
+  Weights: https://huggingface.co/facebook/mms-1b-all
+
+================================================================================
+IMPORTANT LICENSING NOTES
+================================================================================
+
+1. This application's source code is licensed under Apache License 2.0.
+   The Apache 2.0 license applies ONLY to the application code in this
+   repository, not to the third-party models listed above.
+
+2. The Meta MMS / Omnilingual 300M model is licensed under CC-BY-NC-4.0,
+   which prohibits commercial use. If you use this application commercially,
+   do not enable or distribute the Omnilingual 300M model.
+
+3. The NVIDIA Parakeet TDT model requires attribution under CC-BY-4.0.
+
+4. Model weights are not included in this repository. They are downloaded
+   directly from their respective sources by the end user at runtime.
