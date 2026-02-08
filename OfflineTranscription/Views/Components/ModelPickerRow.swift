@@ -4,9 +4,25 @@ struct ModelPickerRow: View {
     let model: ModelInfo
     let isSelected: Bool
     let isDownloaded: Bool
-    let isDownloading: Bool = false
-    let downloadProgress: Double = 0.0
+    let isDownloading: Bool
+    let downloadProgress: Double
     let onTap: () -> Void
+
+    init(
+        model: ModelInfo,
+        isSelected: Bool,
+        isDownloaded: Bool,
+        isDownloading: Bool = false,
+        downloadProgress: Double = 0.0,
+        onTap: @escaping () -> Void
+    ) {
+        self.model = model
+        self.isSelected = isSelected
+        self.isDownloaded = isDownloaded
+        self.isDownloading = isDownloading
+        self.downloadProgress = downloadProgress
+        self.onTap = onTap
+    }
 
     private var clampedProgress: Double {
         min(max(downloadProgress, 0.0), 1.0)
