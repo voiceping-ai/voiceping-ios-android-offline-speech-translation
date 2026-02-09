@@ -107,46 +107,7 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel, onChangeModel: () -> 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Transcribe") },
-                actions = {
-                    var showMenu by remember { mutableStateOf(false) }
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Copy Text") },
-                            leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
-                            modifier = Modifier.semantics { contentDescription = "menu_copy" },
-                            onClick = {
-                                clipboardManager.setText(AnnotatedString(viewModel.fullText))
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Clear") },
-                            leadingIcon = { Icon(Icons.Filled.Delete, null) },
-                            modifier = Modifier.semantics { contentDescription = "menu_clear" },
-                            onClick = {
-                                viewModel.clearTranscription()
-                                showMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Change Model") },
-                            leadingIcon = { Icon(Icons.Filled.SwapHoriz, null) },
-                            modifier = Modifier.semantics { contentDescription = "menu_change_model" },
-                            onClick = {
-                                viewModel.stopIfRecording()
-                                showMenu = false
-                                onChangeModel()
-                            }
-                        )
-                    }
-                }
+                title = { Text("Transcribe") }
             )
         }
     ) { paddingValues ->
@@ -432,6 +393,14 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel, onChangeModel: () -> 
             selectedModel = selectedModel,
             useVAD = useVAD,
             enableTimestamps = enableTimestamps,
+            fullText = viewModel.fullText,
+            onCopyText = { clipboardManager.setText(AnnotatedString(viewModel.fullText)) },
+            onClearTranscription = { viewModel.clearTranscription() },
+            onChangeModel = {
+                viewModel.stopIfRecording()
+                showSettings = false
+                onChangeModel()
+            },
             onVADChange = { viewModel.setUseVAD(it) },
             onTimestampsChange = { viewModel.setEnableTimestamps(it) },
             onDismiss = { showSettings = false }
@@ -445,6 +414,10 @@ private fun SettingsBottomSheet(
     selectedModel: ModelInfo,
     useVAD: Boolean,
     enableTimestamps: Boolean,
+    fullText: String,
+    onCopyText: () -> Unit,
+    onClearTranscription: () -> Unit,
+    onChangeModel: () -> Unit,
     onVADChange: (Boolean) -> Unit,
     onTimestampsChange: (Boolean) -> Unit,
     onDismiss: () -> Unit
@@ -461,6 +434,49 @@ private fun SettingsBottomSheet(
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(bottom = 16.dp)
             )
+
+            // Actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onCopyText,
+                    enabled = fullText.isNotBlank(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { contentDescription = "settings_copy_text" }
+                ) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Copy Text")
+                }
+                OutlinedButton(
+                    onClick = onClearTranscription,
+                    enabled = fullText.isNotBlank(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics { contentDescription = "settings_clear_transcription" }
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Clear")
+                }
+            }
+
+            OutlinedButton(
+                onClick = onChangeModel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+                    .semantics { contentDescription = "settings_change_model" }
+            ) {
+                Icon(Icons.Filled.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Change Model")
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
             // Current Model
             Text(

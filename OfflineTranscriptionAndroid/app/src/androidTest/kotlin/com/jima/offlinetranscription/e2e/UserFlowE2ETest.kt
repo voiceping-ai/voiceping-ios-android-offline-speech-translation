@@ -269,18 +269,18 @@ class UserFlowE2ETest {
         launchWithModel(DEFAULT_MODEL)
         waitForModelAndClear()
 
-        // Open overflow menu
-        val moreButton = device.findObject(By.desc("More"))
-        assertNotNull(moreButton, "More menu button not found")
-        moreButton.click()
-        Thread.sleep(1_000)
+        // Open settings and tap "Change Model"
+        val settingsButton = device.findObject(By.desc("Settings"))
+        assertNotNull(settingsButton, "Settings button not found")
+        settingsButton.click()
+        Thread.sleep(2_000)
 
-        // Screenshot 01: menu open
-        takeScreenshot(dir, "01_menu_open.png")
+        // Screenshot 01: settings open
+        takeScreenshot(dir, "01_settings_open.png")
 
-        // Tap "Change Model"
-        val changeModel = device.wait(Until.findObject(By.desc("menu_change_model")), 5_000)
-        assertNotNull(changeModel, "Change Model menu item not found")
+        // Tap "Change Model" button in settings
+        val changeModel = device.wait(Until.findObject(By.desc("settings_change_model")), 5_000)
+        assertNotNull(changeModel, "Change Model button not found in settings")
         changeModel.click()
         Thread.sleep(2_000)
 
@@ -407,7 +407,7 @@ class UserFlowE2ETest {
         Log.i(TAG, "[$testName] Save and view history — PASSED")
     }
 
-    // ---- Test 7: Copy Transcript ----
+    // ---- Test 7: Copy Transcript via Settings ----
 
     @Test
     fun test_07_copyTranscript() {
@@ -420,23 +420,26 @@ class UserFlowE2ETest {
         // Screenshot 01: transcript visible
         takeScreenshot(dir, "01_transcript.png")
 
-        // Open overflow menu
-        val moreButton = device.findObject(By.desc("More"))
-        assertNotNull(moreButton, "More menu button not found")
-        moreButton.click()
-        Thread.sleep(1_000)
+        // Open settings
+        val settingsButton = device.findObject(By.desc("Settings"))
+        assertNotNull(settingsButton, "Settings button not found")
+        settingsButton.click()
+        Thread.sleep(2_000)
 
-        // Screenshot 02: menu with Copy Text option
-        takeScreenshot(dir, "02_menu_open.png")
+        // Screenshot 02: settings with Copy Text button
+        takeScreenshot(dir, "02_settings_open.png")
 
-        // Tap "Copy Text"
-        val copyText = device.wait(Until.findObject(By.desc("menu_copy")), 5_000)
-        assertNotNull(copyText, "Copy Text menu item not found")
+        // Tap "Copy Text" in settings
+        val copyText = device.wait(Until.findObject(By.desc("settings_copy_text")), 5_000)
+        assertNotNull(copyText, "Copy Text button not found in settings")
         copyText.click()
         Thread.sleep(1_000)
 
-        // Menu should close after copy
-        Log.i(TAG, "[$testName] Copy Text tapped — PASSED")
+        // Dismiss settings
+        device.pressBack()
+        Thread.sleep(1_000)
+
+        Log.i(TAG, "[$testName] Copy Text via settings — PASSED")
     }
 
     // ---- Test 8: Clear Transcription ----
@@ -487,18 +490,18 @@ class UserFlowE2ETest {
         val testName = "09_recordWhileNoModel"
         val dir = evidenceDir(testName)
 
-        // Navigate to setup screen via "Change Model" (more reliable than clearing data)
+        // Navigate to setup screen via "Change Model" in settings
         launchWithModel(DEFAULT_MODEL)
         waitForModelAndClear()
 
-        // Open overflow menu and tap "Change Model"
-        val moreButton = device.findObject(By.desc("More"))
-        assertNotNull(moreButton, "More menu button not found")
-        moreButton.click()
-        Thread.sleep(1_000)
+        // Open settings and tap "Change Model"
+        val settingsButton = device.findObject(By.desc("Settings"))
+        assertNotNull(settingsButton, "Settings button not found")
+        settingsButton.click()
+        Thread.sleep(2_000)
 
-        val changeModel = device.wait(Until.findObject(By.desc("menu_change_model")), 5_000)
-        assertNotNull(changeModel, "Change Model menu item not found")
+        val changeModel = device.wait(Until.findObject(By.desc("settings_change_model")), 5_000)
+        assertNotNull(changeModel, "Change Model button not found in settings")
         changeModel.click()
         Thread.sleep(2_000)
 

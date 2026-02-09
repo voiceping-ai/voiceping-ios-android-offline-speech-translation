@@ -346,9 +346,9 @@ final class UserFlowUITests: XCTestCase {
         captureScreenshot(app, step: "03_deleted")
     }
 
-    // MARK: - Test 7: Overflow Menu Copy and Clear
+    // MARK: - Test 7: Settings Copy and Clear
 
-    func test_07_overflowMenuCopyAndClear() {
+    func test_07_settingsCopyAndClear() {
         // Reset state to clear any leftover translation settings from previous runs
         let app = launchApp(modelId: "sensevoice-small", additionalArgs: ["--reset-state"])
         waitForModelLoad(app)
@@ -360,29 +360,37 @@ final class UserFlowUITests: XCTestCase {
 
         captureScreenshot(app, step: "01_with_text")
 
-        // Open overflow menu
-        let overflowMenu = app.buttons["overflow_menu"]
-        XCTAssertTrue(overflowMenu.waitForExistence(timeout: shortTimeout))
-        overflowMenu.tap()
+        // Open settings
+        let settingsBtn = app.buttons["settings_button"]
+        XCTAssertTrue(settingsBtn.waitForExistence(timeout: shortTimeout))
+        settingsBtn.tap()
         sleep(1)
 
-        captureScreenshot(app, step: "02_menu")
+        captureScreenshot(app, step: "02_settings")
 
-        // Tap Copy Text
-        let copyBtn = app.buttons["Copy Text"]
-        if copyBtn.waitForExistence(timeout: 3) {
-            copyBtn.tap()
+        // Tap Copy Text in settings
+        let copyBtn = app.buttons["settings_copy_text"]
+        XCTAssertTrue(
+            copyBtn.waitForExistence(timeout: shortTimeout),
+            "Copy Text button should exist in settings"
+        )
+        copyBtn.tap()
+        sleep(1)
+
+        // Tap Clear Transcription in settings
+        let clearBtn = app.buttons["settings_clear_transcription"]
+        XCTAssertTrue(
+            clearBtn.waitForExistence(timeout: shortTimeout),
+            "Clear Transcription button should exist in settings"
+        )
+        clearBtn.tap()
+        sleep(2)
+
+        // Dismiss settings
+        let doneBtn = app.buttons["settings_done_button"]
+        if doneBtn.exists && doneBtn.isEnabled {
+            doneBtn.tap()
             sleep(1)
-        }
-
-        // Re-open menu and tap Clear
-        overflowMenu.tap()
-        sleep(1)
-
-        let clearBtn = app.buttons["Clear"]
-        if clearBtn.waitForExistence(timeout: 3) {
-            clearBtn.tap()
-            sleep(2)
         }
 
         // Verify text is cleared — either idle placeholder appears or confirmed text is gone
@@ -390,7 +398,7 @@ final class UserFlowUITests: XCTestCase {
         let confirmedGone = !app.staticTexts["confirmed_text"].exists
         XCTAssertTrue(
             idlePlaceholder.waitForExistence(timeout: shortTimeout) || confirmedGone,
-            "Text should be cleared after tapping Clear"
+            "Text should be cleared after tapping Clear in settings"
         )
 
         captureScreenshot(app, step: "03_cleared")

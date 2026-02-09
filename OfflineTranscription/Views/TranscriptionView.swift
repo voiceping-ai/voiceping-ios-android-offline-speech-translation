@@ -268,29 +268,16 @@ struct TranscriptionView: View {
         }
         .navigationTitle("Transcribe")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        UIPasteboard.general.string = viewModel?.fullText ?? ""
-                    } label: {
-                        Label("Copy Text", systemImage: "doc.on.doc")
-                    }
-                    .disabled(viewModel == nil || (viewModel?.fullText.isEmpty ?? true))
-                    Button(role: .destructive) {
-                        viewModel?.clearTranscription()
-                    } label: {
-                        Label("Clear", systemImage: "trash")
-                    }
-                    .disabled(viewModel == nil || (viewModel?.fullText.isEmpty ?? true))
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityIdentifier("overflow_menu")
-            }
-        }
         .sheet(isPresented: $showSettings) {
-            ModelSettingsSheet()
+            ModelSettingsSheet(
+                fullText: viewModel?.fullText ?? "",
+                onCopyText: {
+                    UIPasteboard.general.string = viewModel?.fullText ?? ""
+                },
+                onClearTranscription: {
+                    viewModel?.clearTranscription()
+                }
+            )
         }
         .alert("Saved", isPresented: $showSaveConfirmation) {
             Button("OK", role: .cancel) {}
@@ -413,9 +400,31 @@ struct ModelSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var isSwitching = false
 
+    let fullText: String
+    let onCopyText: () -> Void
+    let onClearTranscription: () -> Void
+
     var body: some View {
         NavigationStack {
             Form {
+                Section("Actions") {
+                    Button {
+                        onCopyText()
+                    } label: {
+                        Label("Copy Text", systemImage: "doc.on.doc")
+                    }
+                    .accessibilityIdentifier("settings_copy_text")
+                    .disabled(fullText.isEmpty)
+
+                    Button(role: .destructive) {
+                        onClearTranscription()
+                    } label: {
+                        Label("Clear Transcription", systemImage: "trash")
+                    }
+                    .accessibilityIdentifier("settings_clear_transcription")
+                    .disabled(fullText.isEmpty)
+                }
+
                 Section("Current Model") {
                     HStack {
                         Text(whisperService.selectedModel.displayName)

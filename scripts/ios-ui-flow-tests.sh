@@ -22,7 +22,7 @@ ALL_TESTS=(
     "test_04_settingsNavigation"
     "test_05_saveAndHistory"
     "test_06_historyEmptyAndDelete"
-    "test_07_overflowMenuCopyAndClear"
+    "test_07_settingsCopyAndClear"
     "test_08_modelSwitchInSettings"
     "test_09_tabSwitchPreservesState"
     "test_10_modelSetupOnboarding"
