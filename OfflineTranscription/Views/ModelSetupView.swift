@@ -72,7 +72,8 @@ struct ModelSetupView: View {
             isSelected: isSelectedModel,
             isDownloaded: viewModel?.isModelDownloaded(model) ?? false,
             isDownloading: whisperService.modelState == .downloading && isSelectedModel,
-            downloadProgress: whisperService.downloadProgress
+            downloadProgress: whisperService.downloadProgress,
+            isLoading: whisperService.modelState == .loading && isSelectedModel
         ) {
             whisperService.selectedModel = model
             Task {
@@ -85,9 +86,7 @@ struct ModelSetupView: View {
     @ViewBuilder
     private var statusSection: some View {
         VStack(spacing: 16) {
-            if whisperService.modelState == .loading {
-                ProgressView("Loading model...")
-            } else if whisperService.modelState != .downloading {
+            if whisperService.modelState != .downloading && whisperService.modelState != .loading {
                 Text("Tap a model to download and get started.")
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)

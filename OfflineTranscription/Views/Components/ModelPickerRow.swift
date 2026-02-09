@@ -6,6 +6,7 @@ struct ModelPickerRow: View {
     let isDownloaded: Bool
     let isDownloading: Bool
     let downloadProgress: Double
+    let isLoading: Bool
     let onTap: () -> Void
 
     init(
@@ -14,6 +15,7 @@ struct ModelPickerRow: View {
         isDownloaded: Bool,
         isDownloading: Bool = false,
         downloadProgress: Double = 0.0,
+        isLoading: Bool = false,
         onTap: @escaping () -> Void
     ) {
         self.model = model
@@ -21,6 +23,7 @@ struct ModelPickerRow: View {
         self.isDownloaded = isDownloaded
         self.isDownloading = isDownloading
         self.downloadProgress = downloadProgress
+        self.isLoading = isLoading
         self.onTap = onTap
     }
 
@@ -64,6 +67,15 @@ struct ModelPickerRow: View {
                         Text("Downloading \(Int(clampedProgress * 100))%")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                    } else if isLoading {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading model...")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 4)
                     }
                 }
                 Spacer()

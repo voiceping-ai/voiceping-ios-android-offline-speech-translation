@@ -22,6 +22,7 @@ fun ModelPickerRow(
     isDownloaded: Boolean,
     isDownloading: Boolean = false,
     downloadProgress: Float = 0f,
+    isLoading: Boolean = false,
     enabled: Boolean = true,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -121,6 +122,22 @@ fun ModelPickerRow(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            } else if (isLoading) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Loading model...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

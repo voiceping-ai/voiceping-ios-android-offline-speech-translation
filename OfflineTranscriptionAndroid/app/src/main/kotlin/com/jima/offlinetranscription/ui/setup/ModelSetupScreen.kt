@@ -90,20 +90,13 @@ fun ModelSetupScreen(viewModel: ModelSetupViewModel) {
                         isDownloaded = viewModel.isModelDownloaded(model),
                         isDownloading = modelState == ModelState.Downloading && selectedModel.id == model.id,
                         downloadProgress = downloadProgress,
+                        isLoading = modelState == ModelState.Loading && selectedModel.id == model.id,
                         enabled = !isBusy,
                         onClick = { viewModel.selectAndSetup(model) }
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            // Loading progress
-            if (modelState == ModelState.Loading) {
-                Spacer(modifier = Modifier.height(16.dp))
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Loading model...")
             }
 
             lastError?.let { error ->

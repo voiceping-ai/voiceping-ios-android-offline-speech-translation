@@ -33,7 +33,7 @@ data class ModelInfo(
         private const val SENSEVOICE_BASE_URL =
             "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/"
         private const val PARAKEET_BASE_URL =
-            "https://huggingface.co/k2-fsa/sherpa-onnx-nemo-ctc-en-parakeet-tdt-0.6b-v2/resolve/main/"
+            "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/main/"
 
         val availableModels = listOf(
             // -- SenseVoice (sherpa-onnx) --
