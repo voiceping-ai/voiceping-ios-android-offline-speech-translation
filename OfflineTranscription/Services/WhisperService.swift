@@ -470,6 +470,12 @@ final class WhisperService {
         translationTask = nil
         activeEngine?.stopRecording()
         ttsService.stop()
+
+        // Finalize any remaining hypothesis text as confirmed so it is
+        // included when the user saves the session.
+        finalizeCurrentChunk()
+        NSLog("[WhisperService] stopRecording: finalized text='\(confirmedText.prefix(80))' audio=\(currentAudioSamples.count) samples")
+
         isRecording = false
         isTranscribing = false
         sessionState = .idle

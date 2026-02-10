@@ -82,21 +82,32 @@ class TranscriptionViewModel(
 
     fun saveTranscription() {
         val text = fullText
-        if (text.isBlank()) return
+        if (text.isBlank()) {
+            Log.w("TranscriptionVM", "saveTranscription: fullText is blank, nothing to save")
+            return
+        }
 
         // Use actual audio buffer duration, not wall clock
         val duration = engine.recordingDurationSeconds
+        val language = engine.detectedLanguage.value
+        val modelName = engine.selectedModel.value.displayName
+        Log.i("TranscriptionVM", "saveTranscription: text=${text.length} chars, duration=${"%.1f".format(duration)}s, model=$modelName, lang=$language")
+
         viewModelScope.launch {
             val entity = TranscriptionEntity(
                 text = text,
                 durationSeconds = duration,
-                modelUsed = engine.selectedModel.value.displayName
+                modelUsed = modelName,
+                language = language
             )
 
             // Write audio WAV if samples are available
             val samples = engine.audioRecorder.samples
             var audioRelPath: String? = null
             if (samples.isNotEmpty()) {
+                if (engine.audioRecorder.hasDroppedSamples) {
+                    Log.w("TranscriptionVM", "Audio buffer was trimmed during long recording — saved WAV will be incomplete")
+                }
                 try {
                     val sessionDir = File(filesDir, "sessions/${entity.id}")
                     val wavFile = File(sessionDir, "audio.wav")
@@ -104,18 +115,22 @@ class TranscriptionViewModel(
                         WavWriter.write(samples, outputFile = wavFile)
                     }
                     audioRelPath = "sessions/${entity.id}/audio.wav"
-                    Log.i("TranscriptionVM", "Saved audio WAV: ${wavFile.length()} bytes")
+                    Log.i("TranscriptionVM", "Saved audio WAV: ${wavFile.length()} bytes (${samples.size} samples, ${"%.1f".format(samples.size / 16000.0)}s)")
                 } catch (e: Exception) {
                     Log.w("TranscriptionVM", "Failed to write audio WAV", e)
                 }
+            } else {
+                Log.w("TranscriptionVM", "No audio samples available for WAV save")
             }
 
             try {
                 database.transcriptionDao().insert(
                     entity.copy(audioFileName = audioRelPath)
                 )
+                Log.i("TranscriptionVM", "Session saved to history: id=${entity.id}")
                 _showSaveConfirmation.value = true
             } catch (e: Exception) {
+                Log.e("TranscriptionVM", "Failed to save session to database", e)
                 // Clean up audio file on DB failure
                 if (audioRelPath != null) {
                     File(filesDir, "sessions/${entity.id}").deleteRecursively()

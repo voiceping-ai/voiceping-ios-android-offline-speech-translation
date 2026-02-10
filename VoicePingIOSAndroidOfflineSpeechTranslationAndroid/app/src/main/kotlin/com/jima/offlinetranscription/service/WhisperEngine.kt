@@ -608,6 +608,14 @@ class WhisperEngine(
         invalidateSession()
         transcriptionJob?.cancel()
         transcriptionJob = null
+
+        // Finalize any remaining hypothesis text as confirmed so it is
+        // included when the user saves the session.
+        chunkManager.finalizeCurrentChunk()
+        _confirmedText.value = chunkManager.confirmedText
+        _hypothesisText.value = ""
+        Log.i("WhisperEngine", "stopRecording: finalized text='${_confirmedText.value.take(80)}' audio=${audioRecorder.bufferSeconds}s")
+
         transitionTo(SessionState.Idle)
     }
 
@@ -673,16 +681,33 @@ class WhisperEngine(
             }
         } finally {
             // Final transcription pass for any remaining buffered audio.
+            // NOTE: session may already be invalidated by stopRecording(), so we
+            // call the engine directly instead of going through the session-gated
+            // transcribeCurrentBuffer().
             val engine = currentEngine
             if (engine != null && engine.isLoaded) {
                 val currentCount = audioRecorder.sampleCount
                 if (currentCount > lastBufferSize) {
                     try {
                         withContext(NonCancellable) {
-                            transcribeCurrentBuffer(sessionToken)
+                            val slice = chunkManager.computeSlice(currentCount)
+                            if (slice != null) {
+                                val audioSamples = audioRecorder.samplesRange(slice.startSample, slice.endSample)
+                                if (audioSamples.isNotEmpty()) {
+                                    val segments = engine.transcribe(audioSamples, computeInferenceThreads(), "auto")
+                                    if (segments.isNotEmpty()) {
+                                        chunkManager.finalizeTrailing(segments, slice.sliceOffsetMs)
+                                        _confirmedText.value = chunkManager.confirmedText
+                                        _hypothesisText.value = ""
+                                        val lang = segments.firstOrNull()?.detectedLanguage
+                                        if (lang != null) _detectedLanguage.value = lang
+                                        Log.i("WhisperEngine", "realtimeLoop final pass: ${segments.size} segments, text='${chunkManager.confirmedText.takeLast(60)}'")
+                                    }
+                                }
+                            }
                         }
-                    } catch (_: Throwable) {
-                        // Best-effort final pass
+                    } catch (e: Throwable) {
+                        Log.w("WhisperEngine", "realtimeLoop final pass failed", e)
                     }
                 }
             }

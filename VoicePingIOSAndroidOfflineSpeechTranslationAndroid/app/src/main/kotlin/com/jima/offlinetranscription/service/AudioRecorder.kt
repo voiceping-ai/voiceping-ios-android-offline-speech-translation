@@ -76,6 +76,10 @@ class AudioRecorder(private val context: Context) {
     val maxRecentEnergy: Float
         get() = synchronized(energyHistory) { energyHistory.takeLast(30).maxOrNull() ?: 0f }
 
+    /** True if early samples were trimmed during recording (audio WAV will be incomplete). */
+    val hasDroppedSamples: Boolean
+        get() = synchronized(audioBuffer) { droppedSampleCount > 0 }
+
     /** Return a subrange of the audio buffer as a FloatArray. Indices are clamped to valid range. */
     fun samplesRange(fromIndex: Int, toIndex: Int): FloatArray {
         synchronized(audioBuffer) {
