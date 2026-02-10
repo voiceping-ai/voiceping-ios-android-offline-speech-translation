@@ -29,17 +29,10 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Build iOS app (Simulator)
+      - name: Run minimal unit test script
         run: |
-          set -o pipefail
-          xcodebuild \
-            -project VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj \
-            -scheme OfflineTranscription \
-            -destination "generic/platform=iOS Simulator" \
-            -configuration Debug \
-            -derivedDataPath build/DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+          chmod +x ./scripts/ci-ios-unit-test.sh
+          ./scripts/ci-ios-unit-test.sh
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4

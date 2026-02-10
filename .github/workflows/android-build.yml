@@ -14,10 +14,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: VoicePingIOSAndroidOfflineSpeechTranslationAndroid
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,16 +30,10 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Download Android dependencies
+      - name: Run minimal unit test script
         run: |
-          chmod +x ./gradlew ./setup-deps.sh
-          ./setup-deps.sh
-
-      - name: Build debug APK
-        run: ./gradlew --no-daemon assembleDebug
-
-      - name: Run unit tests
-        run: ./gradlew --no-daemon testDebugUnitTest
+          chmod +x ./scripts/ci-android-unit-test.sh
+          ./scripts/ci-android-unit-test.sh
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
