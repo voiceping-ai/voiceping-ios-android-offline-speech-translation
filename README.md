@@ -1,4 +1,4 @@
-# Offline Transcription & Translation
+# VoicePing iOS + Android Offline Speech Translation
 
 Cross-platform (iOS + Android) app for **fully offline speech-to-text transcription, text translation, and text-to-speech** — all inference runs on-device with no cloud dependency.
 
@@ -184,7 +184,7 @@ Models are downloaded once from HuggingFace, then all processing works completel
 
 ```bash
 xcodegen generate
-open OfflineTranscription.xcodeproj
+open VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj
 ```
 
 ### Android
@@ -195,10 +195,10 @@ open OfflineTranscription.xcodeproj
 git clone --recurse-submodules <repo-url>
 
 # Download sherpa-onnx AAR
-./OfflineTranscriptionAndroid/setup-deps.sh
+./VoicePingIOSAndroidOfflineSpeechTranslationAndroid/setup-deps.sh
 
 # Build
-cd OfflineTranscriptionAndroid
+cd VoicePingIOSAndroidOfflineSpeechTranslationAndroid
 ./gradlew assembleDebug
 ```
 
@@ -215,7 +215,7 @@ xcodebuild test -scheme OfflineTranscription \
 ### Android
 ```bash
 # Unit tests (170 tests, 8 classes)
-cd OfflineTranscriptionAndroid
+cd VoicePingIOSAndroidOfflineSpeechTranslationAndroid
 JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
   ./gradlew testDebugUnitTest
 ```

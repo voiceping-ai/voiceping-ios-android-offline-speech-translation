@@ -118,7 +118,7 @@ if [ "$USE_XCUITEST" = true ]; then
         fi
 
         RESULT=$(xcodebuild test \
-            -project "$PROJECT_DIR/OfflineTranscription.xcodeproj" \
+            -project "$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj" \
             -scheme OfflineTranscription \
             -destination "$DESTINATION_ARG" \
             -only-testing:"OfflineTranscriptionUITests/AllModelsE2ETest/$METHOD" \
@@ -181,7 +181,7 @@ fi
 # Build latest app in repo-local DerivedData
 echo "Building app..."
 xcodebuild \
-    -project "$PROJECT_DIR/OfflineTranscription.xcodeproj" \
+    -project "$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj" \
     -scheme OfflineTranscription \
     -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
     -derivedDataPath "$DERIVED_DATA_PATH" \

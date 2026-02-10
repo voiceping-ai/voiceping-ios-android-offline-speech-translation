@@ -74,7 +74,7 @@ for TEST_NAME in "${TESTS[@]}"; do
 
     # Run individual XCUITest
     RESULT=$(xcodebuild test \
-        -project "$PROJECT_DIR/OfflineTranscription.xcodeproj" \
+        -project "$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj" \
         -scheme "$SCHEME" \
         -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
         -only-testing:"$TEST_CLASS/$TEST_NAME" \

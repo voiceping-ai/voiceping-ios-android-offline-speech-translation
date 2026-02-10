@@ -1,5 +1,4 @@
 import Foundation
-import WhisperKit
 import Observation
 import AVFoundation
 
@@ -27,12 +26,11 @@ enum TranslationModelStatus: Equatable, Sendable {
 final class WhisperService {
     // MARK: - State
 
-    private(set) var whisperKit: WhisperKit?
     private(set) var modelState: ASRModelState = .unloaded
     private(set) var downloadProgress: Double = 0.0
-    private(set) var availableModels: [String] = []
     private(set) var currentModelVariant: String?
     private(set) var lastError: AppError?
+    private(set) var loadingStatusMessage: String = ""
 
     // Session & transcription state
     private(set) var sessionState: SessionState = .idle
@@ -59,7 +57,7 @@ final class WhisperService {
     // Configuration
     var selectedModel: ModelInfo = ModelInfo.defaultModel
     var useVAD: Bool = true
-    var silenceThreshold: Float = 0.3
+    var silenceThreshold: Float = 0.0015
     var realtimeDelayInterval: Double = 1.0
     var enableTimestamps: Bool = true
     var enableEagerMode: Bool = true
@@ -106,12 +104,16 @@ final class WhisperService {
     private var lastConfirmedSegmentEndSeconds: Float = 0
     private var prevUnconfirmedSegments: [ASRSegment] = []
     private var consecutiveSilenceCount: Int = 0
+    private var hasCompletedFirstInference: Bool = false
+    /// EMA-smoothed inference time (seconds) for CPU-aware delay calculation.
+    private var movingAverageInferenceSeconds: Double = 0.0
     /// Finalized chunk texts, each representing one completed transcription window.
     private var completedChunksText: String = ""
     private var translationTask: Task<Void, Never>?
     private var lastSpokenTranslatedConfirmed: String = ""
     /// Cache: last input text pair sent for translation (to skip redundant calls).
     private var lastTranslationInput: (confirmed: String, hypothesis: String)?
+    private var lastUIMeterUpdateTimestamp: CFAbsoluteTime = 0
     private let translationService = AppleTranslationService()
     private let ttsService = NativeTTSService()
 
@@ -135,10 +137,33 @@ final class WhisperService {
     private var metricsTask: Task<Void, Never>?
     private let selectedModelKey = "selectedModelVariant"
     private static let sampleRate: Float = 16000
-    /// Maximum audio chunk duration (seconds). Each chunk is transcribed independently;
-    /// when the buffer exceeds this, the current hypothesis is confirmed and a new chunk begins.
-    /// 15s matches Android and keeps mobile inference fast (Whisper is O(n) to O(n²) in audio length).
-    private static let maxChunkSeconds: Float = 15.0
+    private static let displayEnergyFrameLimit = 160
+    private static let uiMeterUpdateInterval: CFTimeInterval = 0.12
+
+    /// SenseVoice chunk duration: 3.5s for fast updates (single-segment model).
+    private static let maxChunkSeconds: Float = 3.5
+
+    // MARK: - Adaptive Delay (CPU-aware, matches Android)
+    /// Initial inference gate: show first words quickly (matches Android's 0.35s).
+    private static let initialMinNewAudioSeconds: Float = 0.35
+    /// Base delay between inferences for sherpa-onnx offline after first decode.
+    private static let sherpaBaseDelaySeconds: Float = 0.7
+    /// Target inference duty cycle — inference should use at most this fraction of wall time.
+    private static let targetInferenceDutyCycle: Float = 0.24
+    /// Maximum CPU-protection delay cap.
+    private static let maxCpuProtectDelaySeconds: Float = 1.6
+    /// EMA smoothing factor for inference time tracking.
+    private static let inferenceEmaAlpha: Double = 0.20
+
+    /// Minimum RMS energy to submit audio for inference. Below this, the audio is
+    /// near-silence and SenseVoice tends to hallucinate ("I.", "Yeah.", "The.").
+    private static let minInferenceRMS: Float = 0.012
+
+    /// Bypass VAD for the first N seconds so initial speech is never dropped.
+    private static let initialVADBypassSeconds: Float = 1.0
+    /// Keep a pre-roll of audio when VAD says silence, so utterance onsets
+    /// that straddle VAD boundaries are not lost.
+    private static let vadPrerollSeconds: Float = 0.6
 
     /// Cancel the active transcription task and keep a handle so we can await
     /// full teardown before starting a new inference session.
@@ -178,15 +203,11 @@ final class WhisperService {
                 self.stopRecordingForTTSIfNeeded()
             }
         }
-        migrateLegacyModelFolder()
         setupAudioObservers()
         startMetricsSampling()
     }
 
     deinit {
-        // Note: @MainActor deinit is nonisolated in Swift 6, so we cannot access
-        // actor-isolated properties here. Task cancellation and engine cleanup
-        // happen via stopRecording() / unloadModel() before deallocation.
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -290,25 +311,6 @@ final class WhisperService {
 
     // MARK: - Model Management
 
-    private func modelFolderKey(for variant: String) -> String {
-        "modelFolder_\(variant)"
-    }
-
-    private func migrateLegacyModelFolder() {
-        let legacyKey = "lastModelFolder"
-        guard let legacyFolder = UserDefaults.standard.string(forKey: legacyKey) else { return }
-
-        for model in ModelInfo.availableModels {
-            if let variant = model.variant, legacyFolder.contains(variant) {
-                let perModelKey = modelFolderKey(for: variant)
-                if UserDefaults.standard.string(forKey: perModelKey) == nil {
-                    UserDefaults.standard.set(legacyFolder, forKey: perModelKey)
-                }
-            }
-        }
-        UserDefaults.standard.removeObject(forKey: legacyKey)
-    }
-
     func loadModelIfAvailable() async {
         // Don't overwrite an already-loaded or in-progress engine
         guard activeEngine == nil, modelState == .unloaded else { return }
@@ -331,18 +333,8 @@ final class WhisperService {
             }
         } catch {
             guard activeEngine === engine else { return }
+            activeEngine = nil
             modelState = .unloaded
-        }
-    }
-
-    func fetchAvailableModels() async {
-        do {
-            let models = try await WhisperKit.fetchAvailableModels(
-                from: "argmaxinc/whisperkit-coreml"
-            )
-            availableModels = models
-        } catch {
-            lastError = .modelDownloadFailed(underlying: error)
         }
     }
 
@@ -354,12 +346,13 @@ final class WhisperService {
         downloadProgress = 0.0
         lastError = nil
 
-        // Sync download progress from engine in background
+        // Sync download progress and status from engine in background
         let progressTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(200))
                 guard let self, self.activeEngine === engine else { break }
                 self.downloadProgress = engine.downloadProgress
+                self.loadingStatusMessage = engine.loadingStatusMessage
                 let engineState = engine.modelState
                 if engineState == .downloaded || engineState == .loading {
                     self.modelState = engineState
@@ -374,6 +367,7 @@ final class WhisperService {
             guard activeEngine === engine else { return }
             modelState = engine.modelState
             downloadProgress = engine.downloadProgress
+            loadingStatusMessage = ""
 
             // Persist selection
             if let variant = selectedModel.variant {
@@ -385,8 +379,10 @@ final class WhisperService {
         } catch {
             progressTask.cancel()
             guard activeEngine === engine else { return }
+            activeEngine = nil
             modelState = .unloaded
             downloadProgress = 0.0
+            loadingStatusMessage = ""
             if let appError = error as? AppError {
                 lastError = appError
             } else {
@@ -396,24 +392,10 @@ final class WhisperService {
     }
 
     func isModelDownloaded(_ model: ModelInfo) -> Bool {
-        switch model.engineType {
-        case .whisperKit:
-            guard let variant = model.variant,
-                  let savedFolder = UserDefaults.standard.string(
-                      forKey: modelFolderKey(for: variant)
-                  ) else {
-                return false
-            }
-            return FileManager.default.fileExists(atPath: savedFolder)
-        case .sherpaOnnxOffline, .sherpaOnnxStreaming:
-            guard let config = model.sherpaModelConfig else { return false }
-            let modelDir = ModelDownloader.modelsDirectory.appendingPathComponent(config.repoName)
-            let tokensPath = modelDir.appendingPathComponent(config.tokens)
-            return FileManager.default.fileExists(atPath: tokensPath.path)
-        case .fluidAudio:
-            // FluidAudio manages its own model cache
-            return false
-        }
+        guard let config = model.sherpaModelConfig else { return false }
+        let modelDir = ModelDownloader.modelsDirectory.appendingPathComponent(config.repoName)
+        let tokensPath = modelDir.appendingPathComponent(config.tokens)
+        return FileManager.default.fileExists(atPath: tokensPath.path)
     }
 
     func switchModel(to model: ModelInfo) async {
@@ -435,7 +417,6 @@ final class WhisperService {
             await engine.unloadModel()
         }
         activeEngine = nil
-        whisperKit = nil
         modelState = .unloaded
         selectedModel = model
         await setupModel()
@@ -539,8 +520,6 @@ final class WhisperService {
                 let audioDuration = Double(samples.count) / Double(Self.sampleRate)
                 NSLog("[E2E] WAV loaded: \(samples.count) samples (\(audioDuration)s)")
                 self.bufferSeconds = audioDuration
-                // E2E fixture audio is English (JFK sample). Force English to stabilize
-                // decoding across multilingual backends (e.g. Whisper, Omnilingual).
                 let options = ASRTranscriptionOptions(
                     language: "en",
                     withTimestamps: enableTimestamps
@@ -686,14 +665,8 @@ final class WhisperService {
 
         guard let engine = activeEngine else { return }
 
-        if engine.isStreaming {
-            transcriptionTask = Task {
-                await streamingLoop(engine: engine)
-            }
-        } else {
-            transcriptionTask = Task {
-                await offlineLoop(engine: engine)
-            }
+        transcriptionTask = Task {
+            await offlineLoop(engine: engine)
         }
     }
 
@@ -717,47 +690,11 @@ final class WhisperService {
         }
     }
 
-    private func streamingLoop(engine: ASREngine) async {
-        while isRecording && isTranscribing && !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(100))
-
-            // Update energy visualization
-            bufferEnergy = engine.relativeEnergy
-            bufferSeconds = Double(engine.audioSamples.count) / Double(Self.sampleRate)
-
-            // Poll streaming result
-            if let result = engine.getStreamingResult() {
-                unconfirmedSegments = result.segments
-                hypothesisText = normalizedJoinedText(from: result.segments)
-                scheduleTranslationUpdate()
-
-                // Endpoint detection → finalize utterance as a new chunk
-                if engine.isEndpointDetected() {
-                    finalizeCurrentChunk()
-                    engine.resetStreamingState()
-                }
-            }
-        }
-
-        if !Task.isCancelled {
-            // Capture final result before stopping
-            if let result = engine.getStreamingResult(),
-               !normalizedJoinedText(from: result.segments).isEmpty {
-                unconfirmedSegments = result.segments
-                finalizeCurrentChunk()
-            }
-
-            isRecording = false
-            isTranscribing = false
-            sessionState = .idle
-            engine.stopRecording()
-        }
-    }
-
     private func transcribeCurrentBuffer(engine: ASREngine) async throws {
         let currentBuffer = engine.audioSamples
         let nextBufferSize = currentBuffer.count - lastBufferSize
         let nextBufferSeconds = Float(nextBufferSize) / Self.sampleRate
+        refreshRealtimeMeters(engine: engine)
 
         let effectiveDelay = adaptiveDelay()
         guard nextBufferSeconds > Float(effectiveDelay) else {
@@ -766,23 +703,24 @@ final class WhisperService {
         }
 
         if useVAD {
-            let voiceDetected = isVoiceDetected(
-                in: engine.relativeEnergy,
-                nextBufferInSeconds: nextBufferSeconds
-            )
-            if !voiceDetected {
-                consecutiveSilenceCount += 1
-                lastBufferSize = currentBuffer.count
-                return
+            // Bypass VAD for the first second so initial speech is never dropped
+            let vadBypassSamples = Int(Self.sampleRate * Self.initialVADBypassSeconds)
+            let bypassVadDuringStartup = !hasCompletedFirstInference && currentBuffer.count <= vadBypassSamples
+            if !bypassVadDuringStartup {
+                let voiceDetected = isVoiceDetected(
+                    in: engine.relativeEnergy,
+                    nextBufferInSeconds: nextBufferSeconds
+                )
+                if !voiceDetected {
+                    consecutiveSilenceCount += 1
+                    // Keep a pre-roll so utterance onsets straddling VAD are preserved
+                    let prerollSamples = Int(Self.sampleRate * Self.vadPrerollSeconds)
+                    lastBufferSize = max(currentBuffer.count - prerollSamples, 0)
+                    return
+                }
+                consecutiveSilenceCount = 0
             }
-            consecutiveSilenceCount = 0
         }
-
-        lastBufferSize = currentBuffer.count
-
-        // Update energy visualization
-        bufferEnergy = engine.relativeEnergy
-        bufferSeconds = Double(currentBuffer.count) / Double(Self.sampleRate)
 
         // Chunk-based windowing: process audio in fixed-size chunks to prevent
         // models from receiving unbounded audio. When the buffer grows past the
@@ -804,6 +742,19 @@ final class WhisperService {
         let audioSamples = Array(currentBuffer[sliceStartSample..<sliceEndSample])
         guard !audioSamples.isEmpty else { return }
 
+        // RMS energy gate: skip inference on near-silence audio to avoid
+        // SenseVoice hallucinations ("I.", "Yeah.", "The.") and save CPU.
+        // NOTE: lastBufferSize is NOT updated on skip — this ensures that when
+        // speech resumes after silence, nextBufferSeconds is already large enough
+        // to pass the delay guard immediately, giving near-instant response.
+        let sliceRMS = sqrt(audioSamples.reduce(Float(0)) { $0 + $1 * $1 } / Float(audioSamples.count))
+        if sliceRMS < Self.minInferenceRMS {
+            try await Task.sleep(for: .milliseconds(500))
+            return
+        }
+
+        lastBufferSize = currentBuffer.count
+
         let options = ASRTranscriptionOptions(
             withTimestamps: enableTimestamps,
             temperature: 0.0
@@ -821,71 +772,103 @@ final class WhisperService {
             tokensPerSecond = Double(wordCount) / elapsed
         }
 
-        NSLog("[WhisperService] chunk inference: %.1fs audio in %.2fs (ratio %.1fx, %d words)",
-              sliceDurationSeconds, elapsed, Double(sliceDurationSeconds) / elapsed, wordCount)
+        // Track inference time with EMA for CPU-aware delay
+        if movingAverageInferenceSeconds <= 0 {
+            movingAverageInferenceSeconds = elapsed
+        } else {
+            movingAverageInferenceSeconds = Self.inferenceEmaAlpha * elapsed
+                + (1.0 - Self.inferenceEmaAlpha) * movingAverageInferenceSeconds
+        }
 
+        NSLog("[WhisperService] chunk inference: %.1fs audio in %.2fs (ratio %.1fx, %d words, emaInf=%.3fs, delay=%.2fs)",
+              sliceDurationSeconds, elapsed, Double(sliceDurationSeconds) / elapsed, wordCount,
+              movingAverageInferenceSeconds, adaptiveDelay())
+
+        hasCompletedFirstInference = true
         processTranscriptionResult(result, sliceOffset: sliceStartSeconds)
     }
 
-    /// Simple voice activity detection using energy levels.
+    /// Voice activity detection using peak + average energy (matches Android).
     private func isVoiceDetected(in energy: [Float], nextBufferInSeconds: Float) -> Bool {
         guard !energy.isEmpty else { return false }
-        let framesPerSecond: Float = 100
-        let windowSize = max(1, Int(nextBufferInSeconds * framesPerSecond))
-        let recentEnergy = energy.suffix(windowSize)
-        let maxEnergy = recentEnergy.max() ?? 0
-        return maxEnergy > silenceThreshold
+        let recentEnergy = energy.suffix(10)
+        let peakEnergy = recentEnergy.max() ?? 0
+        let avgEnergy = recentEnergy.reduce(0, +) / Float(recentEnergy.count)
+        return peakEnergy >= silenceThreshold || avgEnergy >= silenceThreshold * 0.5
     }
 
     private func adaptiveDelay() -> Double {
+        // During silence, back off to save CPU
         if consecutiveSilenceCount > 5 {
             return min(realtimeDelayInterval * 3.0, 3.0)
         } else if consecutiveSilenceCount > 2 {
             return realtimeDelayInterval * 2.0
         }
-        return realtimeDelayInterval
+
+        // Fast initial gate: show first words quickly (matches Android 0.35s)
+        if !hasCompletedFirstInference {
+            return Double(Self.initialMinNewAudioSeconds)
+        }
+
+        // CPU-aware delay (matches Android architecture)
+        return computeCpuAwareDelay(baseDelay: Double(Self.sherpaBaseDelaySeconds))
+    }
+
+    /// Compute delay based on actual inference time to maintain a target CPU duty cycle.
+    /// If inference takes 0.17s and target duty is 24%, delay = 0.17/0.24 = 0.71s.
+    /// This adapts automatically to device speed — fast devices get shorter delays.
+    private func computeCpuAwareDelay(baseDelay: Double) -> Double {
+        let avg = movingAverageInferenceSeconds
+        guard avg > 0 else { return baseDelay }
+        let budgetDelay = avg / Double(Self.targetInferenceDutyCycle)
+        return max(baseDelay, min(budgetDelay, Double(Self.maxCpuProtectDelaySeconds)))
+    }
+
+    /// Update render-facing meters at a fixed cadence with bounded payload size.
+    private func refreshRealtimeMeters(engine: ASREngine, force: Bool = false) {
+        let now = CFAbsoluteTimeGetCurrent()
+        if !force, now - lastUIMeterUpdateTimestamp < Self.uiMeterUpdateInterval {
+            return
+        }
+        lastUIMeterUpdateTimestamp = now
+
+        let sampleCount = engine.audioSamples.count
+        let nextBufferSeconds = Double(sampleCount) / Double(Self.sampleRate)
+        if bufferSeconds != nextBufferSeconds {
+            bufferSeconds = nextBufferSeconds
+        }
+
+        let nextEnergy = Array(engine.relativeEnergy.suffix(Self.displayEnergyFrameLimit))
+        if bufferEnergy != nextEnergy {
+            bufferEnergy = nextEnergy
+        }
     }
 
     private func processTranscriptionResult(_ result: ASRResult, sliceOffset: Float = 0) {
         let newSegments = result.segments
 
-        if enableEagerMode, !prevUnconfirmedSegments.isEmpty {
-            var matchCount = 0
-            for (prevSeg, newSeg) in zip(prevUnconfirmedSegments, newSegments) {
-                if normalizedSegmentText(prevSeg.text)
-                    == normalizedSegmentText(newSeg.text)
-                {
-                    matchCount += 1
-                } else {
-                    break
-                }
-            }
-
-            if matchCount > 0 {
-                let newlyConfirmed = Array(newSegments.prefix(matchCount))
-                confirmedSegments.append(contentsOf: newlyConfirmed)
-
-                if let lastConfirmed = newlyConfirmed.last {
-                    lastConfirmedSegmentEndSeconds = sliceOffset + lastConfirmed.end
-                }
-
-                unconfirmedSegments = Array(newSegments.dropFirst(matchCount))
-            } else {
-                unconfirmedSegments = newSegments
-            }
-        } else {
-            unconfirmedSegments = newSegments
-        }
+        // Eager mode disabled for SenseVoice — single-segment models always return
+        // 1 segment whose text changes every cycle, so segment comparison never confirms.
+        unconfirmedSegments = newSegments
 
         prevUnconfirmedSegments = unconfirmedSegments
 
         // Build confirmed text: completed chunks + within-chunk confirmed segments
         let withinChunkConfirmed = normalizedJoinedText(from: confirmedSegments)
-        confirmedText = [completedChunksText, withinChunkConfirmed]
+        let nextConfirmedText = [completedChunksText, withinChunkConfirmed]
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
-        hypothesisText = normalizedJoinedText(from: unconfirmedSegments)
-        scheduleTranslationUpdate()
+        let nextHypothesisText = normalizedJoinedText(from: unconfirmedSegments)
+        let transcriptionChanged = confirmedText != nextConfirmedText || hypothesisText != nextHypothesisText
+        if confirmedText != nextConfirmedText {
+            confirmedText = nextConfirmedText
+        }
+        if hypothesisText != nextHypothesisText {
+            hypothesisText = nextHypothesisText
+        }
+        if transcriptionChanged {
+            scheduleTranslationUpdate()
+        }
     }
 
     /// Finalize the current chunk: combine all segments into completed text and reset per-chunk state.
@@ -902,9 +885,17 @@ final class WhisperService {
         confirmedSegments = []
         unconfirmedSegments = []
         prevUnconfirmedSegments = []
-        confirmedText = completedChunksText
-        hypothesisText = ""
-        scheduleTranslationUpdate()
+        let nextConfirmedText = completedChunksText
+        let transcriptionChanged = confirmedText != nextConfirmedText || !hypothesisText.isEmpty
+        if confirmedText != nextConfirmedText {
+            confirmedText = nextConfirmedText
+        }
+        if !hypothesisText.isEmpty {
+            hypothesisText = ""
+        }
+        if transcriptionChanged {
+            scheduleTranslationUpdate()
+        }
     }
 
     private func normalizedJoinedText(from segments: [ASRSegment]) -> String {
@@ -932,7 +923,7 @@ final class WhisperService {
 
     // MARK: - Native Translation / TTS
 
-    private func resetTranslationState(stopTTS: Bool) {
+    private func resetTranslationState(stopTTS: Bool = false) {
         translationTask?.cancel()
         translationTask = nil
         translatedConfirmedText = ""
@@ -1049,8 +1040,6 @@ final class WhisperService {
                 self.translatedHypothesisText = translatedHypothesis
             } catch let appError as AppError {
                 guard !Task.isCancelled else { return }
-                // Fallback when native translation is unavailable:
-                // keep UI/TTS functional by reusing source text and surfacing warning inline.
                 self.translatedConfirmedText = self.normalizeDisplayText(confirmedSnapshot)
                 self.translatedHypothesisText = self.normalizeDisplayText(hypothesisSnapshot)
                 warningMessage = appError.localizedDescription
@@ -1121,6 +1110,9 @@ final class WhisperService {
         tokensPerSecond = 0
         prevUnconfirmedSegments = []
         consecutiveSilenceCount = 0
+        hasCompletedFirstInference = false
+        movingAverageInferenceSeconds = 0.0
+        lastUIMeterUpdateTimestamp = 0
         lastError = nil
     }
 

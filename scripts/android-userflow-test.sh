@@ -10,7 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-ANDROID_DIR="$PROJECT_DIR/OfflineTranscriptionAndroid"
+ANDROID_DIR="$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslationAndroid"
 EVIDENCE_DIR="$PROJECT_DIR/artifacts/e2e/android/userflow"
 TEST_CLASS="com.voiceping.offlinetranscription.e2e.UserFlowE2ETest"
 TEST_RUNNER="com.voiceping.offlinetranscription.test/androidx.test.runner.AndroidJUnitRunner"

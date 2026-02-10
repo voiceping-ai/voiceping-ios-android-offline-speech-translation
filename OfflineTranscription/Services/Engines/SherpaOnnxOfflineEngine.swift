@@ -1,12 +1,13 @@
 import Foundation
 import SherpaOnnxKit
 
-/// ASREngine implementation for sherpa-onnx offline models (Moonshine, SenseVoice).
+/// ASREngine implementation for sherpa-onnx offline SenseVoice model.
 @MainActor
 final class SherpaOnnxOfflineEngine: ASREngine {
     var isStreaming: Bool { false }
     private(set) var modelState: ASRModelState = .unloaded
     private(set) var downloadProgress: Double = 0.0
+    private(set) var loadingStatusMessage: String = ""
     var audioSamples: [Float] { recorder.audioSamples }
     var relativeEnergy: [Float] { recorder.relativeEnergy }
 
@@ -53,17 +54,21 @@ final class SherpaOnnxOfflineEngine: ASREngine {
 
         modelState = .loading
         let dirPath = modelDir.path
+        loadingStatusMessage = "Loading model..."
 
         do {
             let recognizer = try await Task.detached {
                 return try Self.createRecognizer(config: config, modelDir: dirPath)
             }.value
 
+            NSLog("[SherpaOnnxOfflineEngine] Created recognizer for model=%@", config.modelType.rawValue)
             self.recognizer = recognizer
             self.currentModel = model
             self.modelState = .loaded
+            self.loadingStatusMessage = ""
         } catch {
             modelState = .error
+            loadingStatusMessage = ""
             throw AppError.modelLoadFailed(underlying: error)
         }
     }
@@ -91,23 +96,50 @@ final class SherpaOnnxOfflineEngine: ASREngine {
             throw AppError.modelNotReady
         }
 
-        // Models using the standard mel feature extractor (SenseVoice) have
-        // normalize_samples=True which divides by 32768, so we must scale up.
-        // Moonshine has its own preprocessor.onnx that takes [-1, 1] directly.
-        let isMoonshine = currentModel?.sherpaModelConfig?.modelType == .moonshine
-        let samples = isMoonshine ? audioArray : audioArray.map { $0 * 32768.0 }
+        let modelName = currentModel?.id ?? "unknown"
+        let audioDuration = Float(audioArray.count) / 16000.0
 
+        // Log audio stats
+        let rms = sqrt(audioArray.reduce(0.0) { $0 + $1 * $1 } / max(Float(audioArray.count), 1))
+        NSLog("[SherpaOnnxOfflineEngine] TRANSCRIBE model=%@ samples=%d duration=%.2fs rms=%.6f",
+              modelName, audioArray.count, audioDuration, rms)
+
+        // All sherpa-onnx models consume raw [-1, 1] float waveforms directly.
+        // No int16 scaling — matches Android behavior where SenseVoice works
+        // with raw floats and has better accuracy.
+        let samples = audioArray
+
+        let decodeStart = CFAbsoluteTimeGetCurrent()
         let result = await Task.detached {
             recognizer.decode(samples: samples, sampleRate: 16000)
         }.value
+        let decodeEnd = CFAbsoluteTimeGetCurrent()
 
-        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
-            return ASRResult(text: "", segments: [], language: nil)
-        }
+        var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        NSLog("[SherpaOnnxOfflineEngine] Decode took %.3fs result_len=%d lang=\"%@\" text=\"%@\"",
+              decodeEnd - decodeStart, text.count, result.lang, String(text.prefix(200)))
 
         // SenseVoice provides language detection
         let detectedLang: String? = result.lang.isEmpty ? nil : result.lang
+
+        // Strip spurious spaces from CJK output. SenseVoice's BPE decoder
+        // sometimes inserts word-boundary spaces that are wrong for ja/zh/ko.
+        if let lang = detectedLang {
+            let langCode = lang.replacingOccurrences(of: "<|", with: "")
+                .replacingOccurrences(of: "|>", with: "")
+            if ["ja", "zh", "ko", "yue"].contains(langCode) {
+                let before = text
+                text = Self.stripCJKSpaces(text)
+                if before != text {
+                    NSLog("[SherpaOnnxOfflineEngine] CJK space strip (%@): \"%@\" → \"%@\"",
+                          langCode, before, text)
+                }
+            }
+        }
+
+        guard !text.isEmpty else {
+            return ASRResult(text: "", segments: [], language: options.language)
+        }
 
         // Create a single segment for the entire transcription
         let duration = Float(audioArray.count) / 16000.0
@@ -129,10 +161,12 @@ final class SherpaOnnxOfflineEngine: ASREngine {
 
     // MARK: - Private
 
+    /// Create a recognizer using CPU provider only (CoreML silently fails on some devices).
     private nonisolated static func createRecognizer(
         config: SherpaModelConfig,
         modelDir: String
     ) throws -> SherpaOnnxOfflineRecognizer {
+        let provider = "cpu"
         let fm = FileManager.default
         let tokensPath = "\(modelDir)/\(config.tokens)"
 
@@ -142,130 +176,84 @@ final class SherpaOnnxOfflineEngine: ASREngine {
         }
 
         let numThreads = recommendedOfflineThreads()
-        var lastError: Error?
 
-        for provider in preferredOfflineProviders() {
-            do {
-                var modelConfig: SherpaOnnxOfflineModelConfig
+        guard let senseVoiceModel = config.senseVoiceModel else {
+            throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
+                          userInfo: [NSLocalizedDescriptionKey: "Missing SenseVoice model file name in config"])
+        }
+        let modelPath = "\(modelDir)/\(senseVoiceModel)"
+        guard fm.fileExists(atPath: modelPath) else {
+            throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
+                          userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(senseVoiceModel)"])
+        }
+        let senseVoiceConfig = sherpaOnnxOfflineSenseVoiceModelConfig(
+            model: modelPath,
+            language: "auto",
+            useInverseTextNormalization: true
+        )
+        let modelConfig = sherpaOnnxOfflineModelConfig(
+            tokens: tokensPath,
+            numThreads: numThreads,
+            provider: provider,
+            debug: 0,
+            senseVoice: senseVoiceConfig
+        )
 
-                switch config.modelType {
-                case .moonshine:
-                    guard let preprocessor = config.preprocessor,
-                          let encoder = config.encoder,
-                          let uncachedDecoder = config.uncachedDecoder,
-                          let cachedDecoder = config.cachedDecoder else {
-                        throw NSError(domain: "SherpaOnnxOfflineEngine", code: -3,
-                                      userInfo: [NSLocalizedDescriptionKey: "Missing moonshine model file names in config"])
-                    }
-                    let paths = [preprocessor, encoder, uncachedDecoder, cachedDecoder]
-                    for p in paths {
-                        let fullPath = "\(modelDir)/\(p)"
-                        guard fm.fileExists(atPath: fullPath) else {
-                            throw NSError(domain: "SherpaOnnxOfflineEngine", code: -3,
-                                          userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(p)"])
-                        }
-                    }
-                    let moonshineConfig = sherpaOnnxOfflineMoonshineModelConfig(
-                        preprocessor: "\(modelDir)/\(preprocessor)",
-                        encoder: "\(modelDir)/\(encoder)",
-                        uncachedDecoder: "\(modelDir)/\(uncachedDecoder)",
-                        cachedDecoder: "\(modelDir)/\(cachedDecoder)"
-                    )
-                    modelConfig = sherpaOnnxOfflineModelConfig(
-                        tokens: tokensPath,
-                        numThreads: numThreads,
-                        provider: provider,
-                        debug: 0,
-                        moonshine: moonshineConfig
-                    )
+        let featConfig = sherpaOnnxFeatureConfig(sampleRate: 16000, featureDim: 80)
+        var recognizerConfig = sherpaOnnxOfflineRecognizerConfig(
+            featConfig: featConfig,
+            modelConfig: modelConfig,
+            decodingMethod: "greedy_search"
+        )
 
-                case .senseVoice:
-                    guard let senseVoiceModel = config.senseVoiceModel else {
-                        throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
-                                      userInfo: [NSLocalizedDescriptionKey: "Missing SenseVoice model file name in config"])
-                    }
-                    let modelPath = "\(modelDir)/\(senseVoiceModel)"
-                    guard fm.fileExists(atPath: modelPath) else {
-                        throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
-                                      userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(senseVoiceModel)"])
-                    }
-                    let senseVoiceConfig = sherpaOnnxOfflineSenseVoiceModelConfig(
-                        model: modelPath,
-                        language: "",
-                        useInverseTextNormalization: true
-                    )
-                    modelConfig = sherpaOnnxOfflineModelConfig(
-                        tokens: tokensPath,
-                        numThreads: numThreads,
-                        provider: provider,
-                        debug: 0,
-                        senseVoice: senseVoiceConfig
-                    )
-
-                case .zipformerTransducer:
-                    throw NSError(domain: "SherpaOnnxOfflineEngine", code: -5,
-                                  userInfo: [NSLocalizedDescriptionKey: "Zipformer transducer should use streaming engine"])
-
-                case .omnilingualCtc:
-                    guard let omniModel = config.omnilingualModel else {
-                        throw NSError(domain: "SherpaOnnxOfflineEngine", code: -7,
-                                      userInfo: [NSLocalizedDescriptionKey: "Missing omnilingual model file name in config"])
-                    }
-                    let modelPath = "\(modelDir)/\(omniModel)"
-                    guard fm.fileExists(atPath: modelPath) else {
-                        throw NSError(domain: "SherpaOnnxOfflineEngine", code: -7,
-                                      userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(omniModel)"])
-                    }
-                    let omniConfig = sherpaOnnxOfflineOmnilingualAsrCtcModelConfig(model: modelPath)
-                    modelConfig = sherpaOnnxOfflineModelConfig(
-                        tokens: tokensPath,
-                        numThreads: numThreads,
-                        provider: provider,
-                        debug: 0,
-                        omnilingual: omniConfig
-                    )
-                }
-
-                let featConfig = sherpaOnnxFeatureConfig(sampleRate: 16000, featureDim: 80)
-                var recognizerConfig = sherpaOnnxOfflineRecognizerConfig(
-                    featConfig: featConfig,
-                    modelConfig: modelConfig,
-                    decodingMethod: "greedy_search"
-                )
-
-                guard let recognizer = SherpaOnnxOfflineRecognizer(config: &recognizerConfig) else {
-                    throw NSError(domain: "SherpaOnnxOfflineEngine", code: -6,
-                                  userInfo: [NSLocalizedDescriptionKey: "Failed to create offline recognizer for provider \(provider)"])
-                }
-                return recognizer
-            } catch {
-                lastError = error
-                NSLog("SherpaOnnxOfflineEngine: provider %@ failed with error: %@", provider, "\(error)")
-            }
+        guard let recognizer = SherpaOnnxOfflineRecognizer(config: &recognizerConfig) else {
+            throw NSError(domain: "SherpaOnnxOfflineEngine", code: -6,
+                          userInfo: [NSLocalizedDescriptionKey: "Failed to create offline recognizer for provider \(provider)"])
         }
 
-        throw lastError ?? NSError(
-            domain: "SherpaOnnxOfflineEngine",
-            code: -6,
-            userInfo: [NSLocalizedDescriptionKey: "Failed to create offline recognizer for all providers"]
-        )
+        return recognizer
     }
 
-    private nonisolated static func preferredOfflineProviders() -> [String] {
-        ["coreml", "cpu"]
+    /// Remove spaces between CJK characters. Keeps spaces around Latin/number runs.
+    private nonisolated static func stripCJKSpaces(_ text: String) -> String {
+        var result = ""
+        let chars = Array(text)
+        for (i, char) in chars.enumerated() {
+            if char == " " {
+                let prev = i > 0 ? chars[i - 1] : nil
+                let next = i + 1 < chars.count ? chars[i + 1] : nil
+                // Keep space only if both neighbors are non-CJK (Latin, digits, etc.)
+                let prevIsCJK = prev.map { Self.isCJK($0) } ?? true
+                let nextIsCJK = next.map { Self.isCJK($0) } ?? true
+                if !prevIsCJK && !nextIsCJK {
+                    result.append(char)
+                }
+                // Otherwise drop the space
+            } else {
+                result.append(char)
+            }
+        }
+        return result
+    }
+
+    private nonisolated static func isCJK(_ char: Character) -> Bool {
+        guard let scalar = char.unicodeScalars.first else { return false }
+        let v = scalar.value
+        // CJK Unified Ideographs, Hiragana, Katakana, Hangul, CJK punctuation
+        return (v >= 0x3000 && v <= 0x9FFF)
+            || (v >= 0xAC00 && v <= 0xD7AF)  // Hangul Syllables
+            || (v >= 0xF900 && v <= 0xFAFF)   // CJK Compat Ideographs
+            || (v >= 0xFF00 && v <= 0xFFEF)   // Fullwidth Forms
+            || (v >= 0x20000 && v <= 0x2FA1F)  // CJK Extension B+
     }
 
     private nonisolated static func recommendedOfflineThreads() -> Int {
         let cores = max(ProcessInfo.processInfo.activeProcessorCount, 1)
         switch cores {
-        case 0 ... 2:
-            return 1
-        case 3 ... 4:
-            return 2
-        case 5 ... 8:
-            return 4
-        default:
-            return 6
+        case 0...2: return 1
+        case 3...4: return 2
+        case 5...8: return 4
+        default:    return 6
         }
     }
 }

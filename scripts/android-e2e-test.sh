@@ -11,7 +11,7 @@ ADB="${ADB_PATH:-$HOME/Library/Android/sdk/platform-tools/adb}"
 PACKAGE="${PACKAGE:-}"
 EVIDENCE_DIR="${EVIDENCE_DIR:-$PROJECT_DIR/artifacts/e2e/android}"
 WAV_SOURCE="${EVAL_WAV_PATH:-$PROJECT_DIR/artifacts/benchmarks/long_en_eval.wav}"
-GRADLE_DIR="$PROJECT_DIR/OfflineTranscriptionAndroid"
+GRADLE_DIR="$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslationAndroid"
 TEST_CLASS="com.voiceping.offlinetranscription.e2e.AllModelsE2ETest"
 INSTRUMENT_TIMEOUT_SEC="${INSTRUMENT_TIMEOUT_SEC:-480}"
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
@@ -19,7 +19,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 if [ -z "$PACKAGE" ]; then
     PACKAGE=$(python3 - <<'PY'
 import pathlib, re, sys
-p = pathlib.Path("OfflineTranscriptionAndroid/app/build.gradle.kts")
+p = pathlib.Path("VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build.gradle.kts")
 txt = p.read_text(encoding="utf-8")
 m = re.search(r'applicationId\s*=\s*"([^"]+)"', txt)
 if not m:

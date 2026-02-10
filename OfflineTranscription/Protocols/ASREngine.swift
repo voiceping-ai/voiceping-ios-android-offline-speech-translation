@@ -37,39 +37,24 @@ enum ASRModelState: String, Equatable, Sendable {
 
 /// Which runtime backend a model uses.
 enum ASREngineType: String, Codable, Sendable {
-    case whisperKit
     case sherpaOnnxOffline
-    case sherpaOnnxStreaming
-    case fluidAudio
 }
 
 // MARK: - Model Family
 
 enum ModelFamily: String, Codable, Sendable, Hashable {
-    case whisper
-    case moonshine
     case senseVoice
-    case zipformer
-    case omnilingual
-    case parakeet
-    case llm
 
     var displayName: String {
         switch self {
-        case .whisper: "Whisper"
-        case .moonshine: "Moonshine"
         case .senseVoice: "SenseVoice"
-        case .zipformer: "Zipformer"
-        case .omnilingual: "Omnilingual"
-        case .parakeet: "Parakeet"
-        case .llm: "LLM (ik_llama.cpp)"
         }
     }
 }
 
 // MARK: - ASR Engine Protocol
 
-/// Abstraction over different ASR backends (WhisperKit, sherpa-onnx offline, sherpa-onnx streaming).
+/// Abstraction over different ASR backends.
 @MainActor
 protocol ASREngine: AnyObject {
     /// Whether this engine uses streaming (incremental) transcription.
@@ -80,6 +65,9 @@ protocol ASREngine: AnyObject {
 
     /// Download progress (0.0–1.0).
     var downloadProgress: Double { get }
+
+    /// Human-readable status during model loading.
+    var loadingStatusMessage: String { get }
 
     /// Set up (download + load) the model.
     func setupModel(_ model: ModelInfo) async throws
@@ -111,20 +99,6 @@ protocol ASREngine: AnyObject {
 
     /// Transcribe a slice of the audio buffer (offline engines).
     func transcribe(audioArray: [Float], options: ASRTranscriptionOptions) async throws -> ASRResult
-
-    // MARK: - Streaming Transcription
-
-    /// Feed audio samples to a streaming engine. No-op for offline engines.
-    func feedAudio(_ samples: [Float]) throws
-
-    /// Poll the streaming engine for the latest partial result. Returns nil for offline engines.
-    func getStreamingResult() -> ASRResult?
-
-    /// Whether the streaming engine detected an endpoint (end of utterance).
-    func isEndpointDetected() -> Bool
-
-    /// Reset the streaming decoder state for the next utterance.
-    func resetStreamingState()
 }
 
 // MARK: - ASR Transcription Options
@@ -144,9 +118,5 @@ enum ASRTask: Sendable {
 // MARK: - Default implementations
 
 extension ASREngine {
-    // Offline engines: streaming methods are no-ops
-    func feedAudio(_ samples: [Float]) throws {}
-    func getStreamingResult() -> ASRResult? { nil }
-    func isEndpointDetected() -> Bool { false }
-    func resetStreamingState() {}
+    var loadingStatusMessage: String { "" }
 }

@@ -1,4 +1,4 @@
-name: OfflineTranscription
+name: VoicePingIOSAndroidOfflineSpeechTranslation
 options:
   bundleIdPrefix: com.voiceping
   deploymentTarget:
@@ -19,23 +19,11 @@ configs:
   Release: release
 
 packages:
-  WhisperKit:
-    url: https://github.com/argmaxinc/WhisperKit.git
-    revision: "2870b46b92eb"
   swift-collections:
     url: https://github.com/apple/swift-collections.git
     from: "1.1.0"
-  swift-transformers:
-    url: https://github.com/huggingface/swift-transformers.git
-    from: "1.1.0"
-  swift-jinja:
-    url: https://github.com/huggingface/swift-jinja.git
-    from: "2.3.0"
   SherpaOnnxKit:
     path: LocalPackages/SherpaOnnxKit
-  FluidAudio:
-    url: https://github.com/FluidInference/FluidAudio.git
-    from: "0.7.9"
 
 targets:
   OfflineTranscription:
@@ -59,16 +47,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationAllButUpsideDown"
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "This app needs microphone access to record and transcribe your speech."
     dependencies:
-      - package: WhisperKit
-        product: WhisperKit
-      - package: swift-transformers
-        product: Hub
-      - package: swift-transformers
-        product: Tokenizers
       - package: SherpaOnnxKit
         product: SherpaOnnxKit
-      - package: FluidAudio
-        product: FluidAudio
 
   OfflineTranscriptionTests:
     type: bundle.unit-test
@@ -81,8 +61,6 @@ targets:
         GENERATE_INFOPLIST_FILE: "YES"
     dependencies:
       - target: OfflineTranscription
-      - package: WhisperKit
-        product: WhisperKit
 
   OfflineTranscriptionUITests:
     type: bundle.ui-testing

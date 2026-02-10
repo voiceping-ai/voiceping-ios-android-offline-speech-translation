@@ -22,9 +22,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
     }
 
     buildTypes {
@@ -52,12 +49,6 @@ android {
         buildConfig = true
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
 }
 
 dependencies {
@@ -94,8 +85,11 @@ dependencies {
     // Coroutines
     implementation(libs.coroutines)
 
-    // sherpa-onnx (offline ASR: Moonshine, SenseVoice)
+    // sherpa-onnx (offline ASR: SenseVoice)
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+
+    // ML Kit Translation (offline)
+    implementation("com.google.mlkit:translate:17.0.3")
 
     // Testing
     testImplementation(libs.junit)

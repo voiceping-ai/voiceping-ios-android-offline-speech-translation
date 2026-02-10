@@ -9,9 +9,6 @@ struct ModelInfo: Identifiable, Hashable {
     let family: ModelFamily
     let engineType: ASREngineType
     let languages: String
-    let inferenceMethodOverride: String?
-    let isSelectable: Bool
-    let availabilityNote: String?
 
     /// WhisperKit variant name (e.g. "openai_whisper-tiny"). Only for WhisperKit models.
     let variant: String?
@@ -28,9 +25,6 @@ struct ModelInfo: Identifiable, Hashable {
         family: ModelFamily,
         engineType: ASREngineType,
         languages: String,
-        inferenceMethodOverride: String? = nil,
-        isSelectable: Bool = true,
-        availabilityNote: String? = nil,
         variant: String? = nil,
         sherpaModelConfig: SherpaModelConfig? = nil
     ) {
@@ -42,9 +36,6 @@ struct ModelInfo: Identifiable, Hashable {
         self.family = family
         self.engineType = engineType
         self.languages = languages
-        self.inferenceMethodOverride = inferenceMethodOverride
-        self.isSelectable = isSelectable
-        self.availabilityNote = availabilityNote
         self.variant = variant
         self.sherpaModelConfig = sherpaModelConfig
     }
@@ -68,54 +59,12 @@ struct ModelInfo: Identifiable, Hashable {
                 senseVoiceModel: "model.int8.onnx"
             )
         ),
-        // MARK: - Parakeet (FluidAudio, CoreML)
-        ModelInfo(
-            id: "parakeet-tdt-v3",
-            displayName: "Parakeet TDT 0.6B",
-            parameterCount: "600M",
-            sizeOnDisk: "~600 MB",
-            description: "High-accuracy multilingual model via FluidAudio CoreML runtime.",
-            family: .parakeet,
-            engineType: .fluidAudio,
-            languages: "25 European languages",
-            variant: nil,
-            sherpaModelConfig: nil
-        ),
-        // MARK: - ik_llama.cpp (cross-platform card)
-        ModelInfo(
-            id: "tinyllama-1.1b-ik-llama-cpp",
-            displayName: "TinyLlama 1.1B (ik_llama.cpp)",
-            parameterCount: "1.1B",
-            sizeOnDisk: "~600 MB",
-            description: "GGUF model card for ik_llama.cpp mobile inference.",
-            family: .llm,
-            engineType: .sherpaOnnxOffline,
-            languages: "General text generation",
-            inferenceMethodOverride: "ik_llama.cpp (GGUF; Metal on iOS, NDK/JNI on Android)",
-            isSelectable: false,
-            availabilityNote: "Card only. Hook up ik_llama.cpp runtime bridge to enable loading and inference.",
-            variant: nil,
-            sherpaModelConfig: nil
-        ),
     ]
 
     static let defaultModel = availableModels.first { $0.id == "sensevoice-small" }!
 
     var inferenceMethodLabel: String {
-        if let override = inferenceMethodOverride {
-            return override
-        }
-
-        switch engineType {
-        case .whisperKit:
-            return "CoreML (WhisperKit)"
-        case .sherpaOnnxOffline:
-            return "sherpa-onnx offline (ONNX Runtime)"
-        case .sherpaOnnxStreaming:
-            return "sherpa-onnx streaming (ONNX Runtime)"
-        case .fluidAudio:
-            return "CoreML (FluidAudio)"
-        }
+        return "sherpa-onnx offline (ONNX Runtime)"
     }
 
     /// Backward-compat: find a model by old-style ID ("tiny" → "whisper-tiny").
@@ -129,7 +78,7 @@ struct ModelInfo: Identifiable, Hashable {
     /// Models grouped by family for UI display.
     static var modelsByFamily: [(family: ModelFamily, models: [ModelInfo])] {
         let grouped = Dictionary(grouping: availableModels, by: \.family)
-        let order: [ModelFamily] = [.whisper, .moonshine, .senseVoice, .zipformer, .omnilingual, .parakeet, .llm]
+        let order: [ModelFamily] = [.senseVoice]
         return order.compactMap { family in
             guard let models = grouped[family], !models.isEmpty else { return nil }
             return (family: family, models: models)
@@ -140,10 +89,7 @@ struct ModelInfo: Identifiable, Hashable {
 // MARK: - sherpa-onnx Model Config
 
 enum SherpaModelType: String, Codable, Sendable {
-    case moonshine
     case senseVoice
-    case zipformerTransducer
-    case omnilingualCtc
 }
 
 struct SherpaModelConfig: Hashable, Sendable {
@@ -151,39 +97,13 @@ struct SherpaModelConfig: Hashable, Sendable {
     let tokens: String
     let modelType: SherpaModelType
 
-    // Moonshine offline
-    var preprocessor: String?
-    var encoder: String?
-    var uncachedDecoder: String?
-    var cachedDecoder: String?
-
     // SenseVoice
     var senseVoiceModel: String?
-
-    // Zipformer streaming transducer
-    var joiner: String?
-
-    // Omnilingual CTC
-    var omnilingualModel: String?
 
     /// All files needed for this model (used for individual file downloads).
     var allFiles: [String] {
         var files = [tokens]
-        switch modelType {
-        case .moonshine:
-            if let p = preprocessor { files.append(p) }
-            if let e = encoder { files.append(e) }
-            if let u = uncachedDecoder { files.append(u) }
-            if let c = cachedDecoder { files.append(c) }
-        case .senseVoice:
-            if let m = senseVoiceModel { files.append(m) }
-        case .zipformerTransducer:
-            if let e = encoder { files.append(e) }
-            if let d = uncachedDecoder { files.append(d) }
-            if let j = joiner { files.append(j) }
-        case .omnilingualCtc:
-            if let m = omnilingualModel { files.append(m) }
-        }
+        if let m = senseVoiceModel { files.append(m) }
         return files
     }
 }
