@@ -18,28 +18,26 @@ class ModelDownloaderTest {
     private lateinit var downloader: ModelDownloader
 
     private val singleFileModel = ModelInfo(
-        id = "whisper-test",
-        displayName = "Whisper Test",
-        engineType = EngineType.WHISPER_CPP,
+        id = "test-single",
+        displayName = "Test Single",
+        engineType = EngineType.SHERPA_ONNX,
+        sherpaModelType = SherpaModelType.SENSE_VOICE,
         parameterCount = "39M",
         sizeOnDisk = "~80 MB",
         description = "Test model",
-        files = listOf(ModelFile("https://example.com/ggml-tiny.bin", "ggml-tiny.bin"))
+        files = listOf(ModelFile("https://example.com/model.int8.onnx", "model.int8.onnx"))
     )
 
     private val multiFileModel = ModelInfo(
-        id = "moonshine-test",
-        displayName = "Moonshine Test",
+        id = "test-multi",
+        displayName = "Test Multi",
         engineType = EngineType.SHERPA_ONNX,
-        sherpaModelType = SherpaModelType.MOONSHINE,
-        parameterCount = "27M",
-        sizeOnDisk = "~125 MB",
+        sherpaModelType = SherpaModelType.SENSE_VOICE,
+        parameterCount = "234M",
+        sizeOnDisk = "~240 MB",
         description = "Test model",
         files = listOf(
-            ModelFile("https://example.com/preprocess.onnx", "preprocess.onnx"),
-            ModelFile("https://example.com/encode.int8.onnx", "encode.int8.onnx"),
-            ModelFile("https://example.com/uncached_decode.int8.onnx", "uncached_decode.int8.onnx"),
-            ModelFile("https://example.com/cached_decode.int8.onnx", "cached_decode.int8.onnx"),
+            ModelFile("https://example.com/model.int8.onnx", "model.int8.onnx"),
             ModelFile("https://example.com/tokens.txt", "tokens.txt"),
         )
     )
@@ -61,14 +59,14 @@ class ModelDownloaderTest {
     @Test
     fun modelDir_returnsSubdirectoryNamedByModelId() {
         val dir = downloader.modelDir(singleFileModel)
-        assertEquals("whisper-test", dir.name)
+        assertEquals("test-single", dir.name)
         assertEquals(tempDir.absolutePath, dir.parentFile?.absolutePath)
     }
 
     @Test
     fun modelDir_usesModelId_forMultiFileModel() {
         val dir = downloader.modelDir(multiFileModel)
-        assertEquals("moonshine-test", dir.name)
+        assertEquals("test-multi", dir.name)
     }
 
     // -- modelFilePath --
@@ -76,13 +74,13 @@ class ModelDownloaderTest {
     @Test
     fun modelFilePath_returnsPathToFirstFile() {
         val path = downloader.modelFilePath(singleFileModel)
-        assertTrue(path.endsWith("whisper-test/ggml-tiny.bin"), "Expected path ending with whisper-test/ggml-tiny.bin but got $path")
+        assertTrue(path.endsWith("test-single/model.int8.onnx"), "Expected path ending with test-single/model.int8.onnx but got $path")
     }
 
     @Test
     fun modelFilePath_forMultiFile_returnsFirstFile() {
         val path = downloader.modelFilePath(multiFileModel)
-        assertTrue(path.endsWith("moonshine-test/preprocess.onnx"))
+        assertTrue(path.endsWith("test-multi/model.int8.onnx"))
     }
 
     // -- isModelDownloaded --
@@ -94,29 +92,27 @@ class ModelDownloaderTest {
 
     @Test
     fun isModelDownloaded_returnsTrue_whenSingleFileExists() {
-        val dir = File(tempDir, "whisper-test")
+        val dir = File(tempDir, "test-single")
         dir.mkdirs()
-        File(dir, "ggml-tiny.bin").writeText("fake model data")
+        File(dir, "model.int8.onnx").writeText("fake model data")
 
         assertTrue(downloader.isModelDownloaded(singleFileModel))
     }
 
     @Test
     fun isModelDownloaded_returnsFalse_whenPartialMultiFileDownload() {
-        val dir = File(tempDir, "moonshine-test")
+        val dir = File(tempDir, "test-multi")
         dir.mkdirs()
-        // Only create some of the 5 required files
-        File(dir, "preprocess.onnx").writeText("data")
-        File(dir, "encode.int8.onnx").writeText("data")
-        File(dir, "tokens.txt").writeText("data")
-        // Missing: uncached_decode.int8.onnx, cached_decode.int8.onnx
+        // Only create one of the 2 required files
+        File(dir, "model.int8.onnx").writeText("data")
+        // Missing: tokens.txt
 
         assertFalse(downloader.isModelDownloaded(multiFileModel))
     }
 
     @Test
     fun isModelDownloaded_returnsTrue_whenAllMultiFilesExist() {
-        val dir = File(tempDir, "moonshine-test")
+        val dir = File(tempDir, "test-multi")
         dir.mkdirs()
         multiFileModel.files.forEach { file ->
             File(dir, file.localName).writeText("fake data")
@@ -127,10 +123,10 @@ class ModelDownloaderTest {
 
     @Test
     fun isModelDownloaded_ignoresTempFiles() {
-        val dir = File(tempDir, "whisper-test")
+        val dir = File(tempDir, "test-single")
         dir.mkdirs()
         // Only a .tmp file exists, not the final file
-        File(dir, "ggml-tiny.bin.tmp").writeText("incomplete data")
+        File(dir, "model.int8.onnx.tmp").writeText("incomplete data")
 
         assertFalse(downloader.isModelDownloaded(singleFileModel))
     }

@@ -67,6 +67,13 @@ struct ModelInfo: Identifiable, Hashable {
         return "sherpa-onnx offline (ONNX Runtime)"
     }
 
+    /// Whether this model can currently be selected on this device.
+    /// The SenseVoice-only build has no per-device exclusions.
+    var isSelectable: Bool { true }
+
+    /// Optional UI note explaining temporary unavailability.
+    var availabilityNote: String? { nil }
+
     /// Backward-compat: find a model by old-style ID ("tiny" → "whisper-tiny").
     static func findByLegacyId(_ legacyId: String) -> ModelInfo? {
         if let model = availableModels.first(where: { $0.id == legacyId }) {

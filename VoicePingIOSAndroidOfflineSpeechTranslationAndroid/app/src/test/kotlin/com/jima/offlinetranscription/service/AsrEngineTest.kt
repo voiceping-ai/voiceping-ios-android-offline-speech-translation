@@ -28,18 +28,14 @@ class AsrEngineTest {
         }
 
         assertFalse(engine.isLoaded)
-        engine.feedAudio(floatArrayOf(0.1f))
-        assertEquals(null, engine.getStreamingResult())
-        assertFalse(engine.isEndpointDetected())
-        engine.resetStreamingState()
         engine.release()
     }
 
     @Test
     fun allCurrentModels_areSherpaOfflineAndTyped() {
-        val selectableModels = ModelInfo.availableModels.filter { it.isSelectable }
-        assertTrue(selectableModels.isNotEmpty())
-        selectableModels.forEach { model ->
+        val models = ModelInfo.availableModels
+        assertTrue(models.isNotEmpty())
+        models.forEach { model ->
             assertEquals(EngineType.SHERPA_ONNX, model.engineType, "Unexpected engine for ${model.id}")
             assertNotNull(model.sherpaModelType, "sherpaModelType must be set for ${model.id}")
             assertTrue(
@@ -56,23 +52,5 @@ class AsrEngineTest {
         val names = model.files.map { it.localName }.toSet()
         assertTrue("model.int8.onnx" in names)
         assertTrue("tokens.txt" in names)
-    }
-
-    @Test
-    fun parakeetModel_mapsToNemoTransducerType() {
-        val model = ModelInfo.availableModels.first { it.id == "parakeet-tdt-0.6b-v2-int8" }
-        assertEquals(SherpaModelType.PARAKEET_NEMO_TRANSDUCER, model.sherpaModelType)
-
-        val names = model.files.map { it.localName }.toSet()
-        assertTrue("encoder.int8.onnx" in names, "Parakeet requires encoder")
-        assertTrue("decoder.int8.onnx" in names, "Parakeet requires decoder")
-        assertTrue("joiner.int8.onnx" in names, "Parakeet requires joiner")
-        assertTrue("tokens.txt" in names, "Parakeet requires tokens")
-    }
-
-    @Test
-    fun noStreamingModels_areConfiguredInCurrentCatalog() {
-        val streaming = ModelInfo.availableModels.filter { it.engineType == EngineType.SHERPA_ONNX_STREAMING }
-        assertTrue(streaming.isEmpty(), "Streaming catalog should be empty in this Android build")
     }
 }

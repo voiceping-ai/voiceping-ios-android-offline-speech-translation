@@ -13,7 +13,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.voiceping.offlinetranscription.model.EngineType
 import com.voiceping.offlinetranscription.model.ModelInfo
 import com.voiceping.offlinetranscription.model.ModelState
 import com.voiceping.offlinetranscription.ui.components.ModelPickerRow
@@ -74,28 +73,17 @@ fun ModelSetupScreen(viewModel: ModelSetupViewModel) {
 
             val isBusy = modelState == ModelState.Downloading || modelState == ModelState.Loading
 
-            ModelInfo.modelsByEngine.forEach { (engineType, models) ->
-                Text(
-                    text = engineLabel(engineType),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .align(Alignment.Start)
-                        .padding(bottom = 4.dp)
+            ModelInfo.availableModels.forEach { model ->
+                ModelPickerRow(
+                    model = model,
+                    isSelected = selectedModel.id == model.id,
+                    isDownloaded = viewModel.isModelDownloaded(model),
+                    isDownloading = modelState == ModelState.Downloading && selectedModel.id == model.id,
+                    downloadProgress = downloadProgress,
+                    isLoading = modelState == ModelState.Loading && selectedModel.id == model.id,
+                    enabled = !isBusy,
+                    onClick = { viewModel.selectAndSetup(model) }
                 )
-                models.forEach { model ->
-                    ModelPickerRow(
-                        model = model,
-                        isSelected = selectedModel.id == model.id,
-                        isDownloaded = viewModel.isModelDownloaded(model),
-                        isDownloading = modelState == ModelState.Downloading && selectedModel.id == model.id,
-                        downloadProgress = downloadProgress,
-                        isLoading = modelState == ModelState.Loading && selectedModel.id == model.id,
-                        enabled = !isBusy && model.isSelectable,
-                        onClick = { viewModel.selectAndSetup(model) }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
@@ -113,8 +101,3 @@ fun ModelSetupScreen(viewModel: ModelSetupViewModel) {
     }
 }
 
-private fun engineLabel(type: EngineType): String = when (type) {
-    EngineType.WHISPER_CPP -> "Whisper (whisper.cpp)"
-    EngineType.SHERPA_ONNX -> "SenseVoice / Parakeet (sherpa-onnx)"
-    EngineType.SHERPA_ONNX_STREAMING -> "Streaming (sherpa-onnx)"
-}

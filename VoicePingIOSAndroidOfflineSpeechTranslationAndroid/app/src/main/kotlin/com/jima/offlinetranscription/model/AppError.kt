@@ -5,6 +5,7 @@ sealed class AppError(val message: String) {
     class NoMicrophoneSignal : AppError(
         "No microphone signal detected. In Android Emulator, enable host mic in Extended Controls > Microphone."
     )
+    class NetworkUnavailable : AppError("No internet connection. Connect to download the model.")
     class ModelDownloadFailed(cause: Throwable) : AppError("Failed to download the model: ${cause.localizedMessage}")
     class ModelLoadFailed(cause: Throwable) : AppError("Failed to load the model: ${cause.localizedMessage}")
     class TranscriptionFailed(cause: Throwable) : AppError("Transcription failed: ${cause.localizedMessage}")

@@ -2,7 +2,6 @@ package com.voiceping.offlinetranscription.service
 
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
-import com.voiceping.offlinetranscription.model.EngineType
 import com.voiceping.offlinetranscription.model.ModelInfo
 import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.runBlocking
@@ -46,37 +45,7 @@ class AllModelsTranscribeTest {
     // ---- Individual model tests ----
 
     @Test
-    fun test_whisperTiny() = testModel("whisper-tiny")
-
-    @Test
-    fun test_whisperBase() = testModel("whisper-base")
-
-    @Test
-    fun test_whisperBaseEn() = testModel("whisper-base-en")
-
-    @Test
-    fun test_whisperSmall() = testModel("whisper-small")
-
-    @Test
-    fun test_whisperLargeV3Turbo() = testModel("whisper-large-v3-turbo")
-
-    @Test
-    fun test_whisperLargeV3TurboCompressed() = testModel("whisper-large-v3-turbo-compressed")
-
-    @Test
-    fun test_moonshineTiny() = testModel("moonshine-tiny")
-
-    @Test
-    fun test_moonshineBase() = testModel("moonshine-base")
-
-    @Test
     fun test_sensevoiceSmall() = testModel("sensevoice-small")
-
-    @Test
-    fun test_omnilingual300m() = testModel("omnilingual-300m")
-
-    @Test
-    fun test_zipformer20m() = testModel("zipformer-20m")
 
     // ---- Core test logic ----
 
@@ -95,11 +64,11 @@ class AllModelsTranscribeTest {
         assertTrue(downloader.isModelDownloaded(model), "[$modelId] Model should be downloaded")
 
         // 2. Create engine
-        val engine = createEngine(model)
+        val engine = SherpaOnnxEngine(modelType = model.sherpaModelType!!)
         currentEngine = engine
 
         // 3. Load model
-        val modelPath = resolveModelPath(model)
+        val modelPath = downloader.modelDir(model).absolutePath
         Log.i(TAG, "[$modelId] Loading from $modelPath")
         val loaded = engine.loadModel(modelPath)
         assertTrue(loaded, "[$modelId] Model failed to load")
@@ -133,24 +102,6 @@ class AllModelsTranscribeTest {
         engine.release()
         currentEngine = null
         Log.i(TAG, "[$modelId] PASSED")
-    }
-
-    private fun createEngine(model: ModelInfo): AsrEngine {
-        return when (model.engineType) {
-            EngineType.WHISPER_CPP -> WhisperCppEngine()
-            EngineType.SHERPA_ONNX -> SherpaOnnxEngine(
-                modelType = model.sherpaModelType!!
-            )
-            EngineType.SHERPA_ONNX_STREAMING -> SherpaOnnxStreamingEngine()
-        }
-    }
-
-    private fun resolveModelPath(model: ModelInfo): String {
-        return when (model.engineType) {
-            EngineType.WHISPER_CPP -> downloader.modelFilePath(model)
-            EngineType.SHERPA_ONNX -> downloader.modelDir(model).absolutePath
-            EngineType.SHERPA_ONNX_STREAMING -> downloader.modelDir(model).absolutePath
-        }
     }
 
     /** Read a 16kHz mono PCM16 WAV file into a float array [-1, 1]. */
