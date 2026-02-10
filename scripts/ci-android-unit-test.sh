@@ -9,7 +9,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslationAndroid"
 
 # Keep this minimal and stable while still exercising app-level test wiring.
-TEST_FILTER="${ANDROID_TEST_FILTER:-com.jima.offlinetranscription.service.AsrEngineTest}"
+TEST_FILTER="${ANDROID_TEST_FILTER:-com.voiceping.offlinetranscription.service.AsrEngineTest}"
 
 cd "$APP_DIR"
 chmod +x ./gradlew ./setup-deps.sh
