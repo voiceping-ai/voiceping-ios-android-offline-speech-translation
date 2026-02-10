@@ -36,7 +36,13 @@ final class AudioRecorder {
         guard granted else { throw AppError.microphonePermissionDenied }
 
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
+        let categoryOptions: AVAudioSession.CategoryOptions
+#if compiler(>=6.2)
+        categoryOptions = [.defaultToSpeaker, .allowBluetoothHFP]
+#else
+        categoryOptions = [.defaultToSpeaker, .allowBluetooth]
+#endif
+        try session.setCategory(.playAndRecord, mode: .default, options: categoryOptions)
         try session.setActive(true)
 
         let engine = AVAudioEngine()
