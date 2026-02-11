@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.voiceping.offlinetranscription.data.AppDatabase
 import com.voiceping.offlinetranscription.data.TranscriptionEntity
 import com.voiceping.offlinetranscription.model.ModelInfo
+import com.voiceping.offlinetranscription.model.TranslationProvider
 import com.voiceping.offlinetranscription.service.WhisperEngine
 import com.voiceping.offlinetranscription.util.WavWriter
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +41,8 @@ class TranscriptionViewModel(
     val translatedConfirmedText = engine.translatedConfirmedText
     val translatedHypothesisText = engine.translatedHypothesisText
     val translationWarning = engine.translationWarning
+    val translationProvider = engine.translationProvider
+    val isAndroidSystemTranslationAvailable = engine.isAndroidSystemTranslationAvailable
     val cpuPercent = engine.cpuPercent
     val memoryMB = engine.memoryMB
     val e2eResult = engine.e2eResult
@@ -211,6 +214,12 @@ class TranscriptionViewModel(
     fun setTtsRate(rate: Float) {
         viewModelScope.launch {
             engine.setTtsRate(rate)
+        }
+    }
+
+    fun setTranslationProvider(provider: TranslationProvider) {
+        viewModelScope.launch {
+            engine.setTranslationProvider(provider)
         }
     }
 }

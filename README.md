@@ -6,7 +6,7 @@
 Cross-platform (iOS + Android) app for **fully offline speech-to-text transcription, text translation, and text-to-speech** — all inference runs on-device with no cloud dependency.
 
 - **Transcription**: Record speech and transcribe it locally using multiple ASR engines (Whisper, Moonshine, SenseVoice, Zipformer, Parakeet, Apple Speech, Android SpeechRecognizer). Batch and real-time streaming modes.
-- **Translation**: Translate transcribed text on-device (iOS: Apple Translation framework, Android: Google ML Kit Translation).
+- **Translation**: Translate transcribed text on-device (iOS: Apple Translation framework, Android: Google ML Kit Translation or Android System Translation).
 - **Text-to-Speech**: Read text aloud using native TTS (iOS: AVSpeechSynthesizer, Android: TextToSpeech API).
 - **Audio Playback & Export**: Save session audio as WAV, play back with waveform scrubber, and export sessions as ZIP.
 
@@ -41,9 +41,9 @@ Models are downloaded once from HuggingFace, then all processing works completel
 
 ### Android (Kotlin + Compose + Room)
 - 4 ASR engines: whisper.cpp (JNI), sherpa-onnx offline, sherpa-onnx streaming, Android SpeechRecognizer
-- 12 models across 5 families + system speech
-- Google ML Kit Translation (offline, 50+ languages)
-- Android SpeechRecognizer: built-in on-device STT (API 31+ guaranteed offline, API 26+ with EXTRA_PREFER_OFFLINE)
+- 13 models across 5 families + system speech (offline & online)
+- Google ML Kit Translation (offline, 50+ languages) or Android System Translation (TranslationManager API 31+)
+- Android SpeechRecognizer: built-in on-device STT — offline mode (guaranteed on-device, API 31+) and online mode (cloud-backed, API 26+)
 - TextToSpeech API
 - Room database with manual migration (v1 to v2)
 - FileProvider-based session sharing
@@ -67,7 +67,7 @@ Models are downloaded once from HuggingFace, then all processing works completel
 | Parakeet TDT 0.6B | FluidAudio (CoreML) | ~600 MB | 600M | 25 European languages |
 | Apple Speech | Apple Speech (SFSpeechRecognizer) | Built-in | System | 50+ languages |
 
-### Android (12 models)
+### Android (13 models)
 
 | Model | Engine | Size | Params | Languages |
 |-------|--------|------|--------|-----------|
@@ -82,7 +82,8 @@ Models are downloaded once from HuggingFace, then all processing works completel
 | SenseVoice Small | sherpa-onnx | ~240 MB | 234M | zh/en/ja/ko/yue |
 | Omnilingual 300M | sherpa-onnx | ~365 MB | 300M | 1,600+ languages |
 | Zipformer Streaming | sherpa-onnx | ~46 MB | 20M | English |
-| Android Speech | Android SpeechRecognizer | Built-in | System | System languages |
+| Android Speech (Offline) | Android SpeechRecognizer (on-device, API 31+) | Built-in | System | System languages |
+| Android Speech (Online) | Android SpeechRecognizer (cloud-backed) | Built-in | System | System languages |
 
 ### Experimental Model Card (iOS + Android)
 
@@ -141,12 +142,13 @@ Models are downloaded once from HuggingFace, then all processing works completel
 │                                                                │
 │  ┌──────────────────────────────────────────────────────────┐ │
 │  │ AsrEngine: SherpaOnnx | AndroidSpeechEngine             │ │
-│  │            (self-recording via SpeechRecognizer)         │ │
+│  │   (Offline: on-device API 31+ | Online: cloud-backed)  │ │
 │  └──────────────────────────────────────────────────────────┘ │
 │                                                                │
 │  ┌────────────────┐ ┌─────────────────┐ ┌─────────────────┐  │
 │  │ AudioRecorder  │ │ MlKitTranslator │ │ AndroidTts      │  │
-│  │ (AudioRecord)  │ │ (ML Kit 17.0.3) │ │ Service         │  │
+│  │ (AudioRecord)  │ │ + AndroidSystem │ │ Service         │  │
+│  │                │ │ Translator      │ │                 │  │
 │  └────────────────┘ └─────────────────┘ └─────────────────┘  │
 │  ┌────────────────┐ ┌─────────────────┐ ┌─────────────────┐  │
 │  │ ModelDownloader│ │ AudioPlayback   │ │ SystemMetrics   │  │
@@ -168,11 +170,17 @@ Models are downloaded once from HuggingFace, then all processing works completel
 - Uses `TranslationSession` for on-device neural translation
 - Language packs downloaded via iOS Settings > Translate
 
-### Android — Google ML Kit Translation
+### Android — Google ML Kit Translation (default)
 - Available on **Android 5.0+ (API 21)**
 - Uses `com.google.mlkit:translate` (v17.0.3) for fully offline neural translation
 - ~30 MB per language pair, downloaded on first use
 - 50+ languages supported
+
+### Android — Android System Translation (alternative)
+- Available on **Android 12+ (API 31)** with `TranslationManager`
+- Uses system-managed language packs (downloaded via Settings > System > Languages)
+- Works fully offline once language packs are installed
+- Selectable via translation provider toggle in settings
 
 ## Text-to-Speech
 
@@ -238,7 +246,7 @@ xcodebuild -scheme OfflineTranscription \
 
 ### Android
 ```bash
-# Unit tests (145 tests, 8 classes)
+# Unit tests (146 tests, 8 classes)
 cd VoicePingIOSAndroidOfflineSpeechTranslationAndroid
 JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
   ./gradlew testDebugUnitTest
@@ -263,7 +271,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
 | UI | SwiftUI | Jetpack Compose + Material3 |
 | Persistence | SwiftData | Room + DataStore |
 | ASR | WhisperKit, sherpa-onnx, FluidAudio, Apple Speech | sherpa-onnx, Android SpeechRecognizer |
-| Translation | Apple Translation (iOS 18+) | Google ML Kit Translation |
+| Translation | Apple Translation (iOS 18+) | Google ML Kit Translation / Android System Translation (API 31+) |
 | TTS | AVSpeechSynthesizer | TextToSpeech API |
 | Min OS | iOS 17.0 | Android 8.0 (API 26) |
 

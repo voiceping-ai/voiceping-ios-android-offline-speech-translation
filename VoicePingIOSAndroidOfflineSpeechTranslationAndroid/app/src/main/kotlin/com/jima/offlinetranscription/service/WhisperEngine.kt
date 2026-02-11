@@ -7,10 +7,12 @@ import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import com.voiceping.offlinetranscription.data.AppPreferences
+import com.voiceping.offlinetranscription.model.AndroidSpeechMode
 import com.voiceping.offlinetranscription.model.AppError
 import com.voiceping.offlinetranscription.model.EngineType
 import com.voiceping.offlinetranscription.model.ModelInfo
 import com.voiceping.offlinetranscription.model.ModelState
+import com.voiceping.offlinetranscription.model.TranslationProvider
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -130,10 +132,27 @@ class WhisperEngine(
     private val _translationWarning = MutableStateFlow<String?>(null)
     val translationWarning: StateFlow<String?> = _translationWarning.asStateFlow()
 
-    // ML Kit translation (replaces AndroidNativeTranslator — works on API 21+)
+    // Translation providers
     private val mlKitTranslator = MlKitTranslator()
-    val translationModelReady: StateFlow<Boolean> get() = mlKitTranslator.modelReady
-    val translationDownloadStatus: StateFlow<String?> get() = mlKitTranslator.downloadStatus
+    private val androidSystemTranslator = AndroidSystemTranslator(context)
+
+    private val _translationProvider = MutableStateFlow(TranslationProvider.ML_KIT)
+    val translationProvider: StateFlow<TranslationProvider> = _translationProvider.asStateFlow()
+
+    val translationModelReady: StateFlow<Boolean>
+        get() = when (_translationProvider.value) {
+            TranslationProvider.ML_KIT -> mlKitTranslator.modelReady
+            TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.modelReady
+        }
+
+    val translationDownloadStatus: StateFlow<String?>
+        get() = when (_translationProvider.value) {
+            TranslationProvider.ML_KIT -> mlKitTranslator.downloadStatus
+            TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.downloadStatus
+        }
+
+    val isAndroidSystemTranslationAvailable: Boolean
+        get() = androidSystemTranslator.isAvailable
 
     // System resource metrics (always sampled)
     private val systemMetrics = SystemMetrics()
@@ -277,6 +296,18 @@ class WhisperEngine(
                 _ttsRate.value = rate
             }
         }
+        scope.launch {
+            preferences.translationProvider.collect { providerName ->
+                val provider = try {
+                    TranslationProvider.valueOf(providerName)
+                } catch (_: IllegalArgumentException) {
+                    TranslationProvider.ML_KIT
+                }
+                _translationProvider.value = provider
+                lastTranslationInput = null
+                scheduleTranslationUpdate()
+            }
+        }
         scope.launch(Dispatchers.Default) {
             while (true) {
                 _cpuPercent.value = systemMetrics.getCpuPercent()
@@ -293,7 +324,10 @@ class WhisperEngine(
                 modelType = model.sherpaModelType
                     ?: throw IllegalArgumentException("sherpaModelType required for SHERPA_ONNX models")
             )
-            EngineType.ANDROID_SPEECH -> AndroidSpeechEngine(context)
+            EngineType.ANDROID_SPEECH -> AndroidSpeechEngine(
+                context = context,
+                mode = model.androidSpeechMode ?: AndroidSpeechMode.OFFLINE
+            )
         }
     }
 
@@ -505,6 +539,14 @@ class WhisperEngine(
         val normalized = rate.coerceIn(0.25f, 2.0f)
         _ttsRate.value = normalized
         preferences.setTtsRate(normalized)
+    }
+
+    suspend fun setTranslationProvider(provider: TranslationProvider) {
+        _translationProvider.value = provider
+        preferences.setTranslationProvider(provider.name)
+        lastTranslationInput = null
+        resetTranslationState(stopTts = true)
+        scheduleTranslationUpdate()
     }
 
     suspend fun prewarmRecordingPath() {
@@ -1438,21 +1480,13 @@ class WhisperEngine(
                     translatedConfirmed = if (confirmedSnapshot.isBlank()) {
                         ""
                     } else {
-                        mlKitTranslator.translate(
-                            text = confirmedSnapshot,
-                            sourceLanguageCode = sourceLanguageCode,
-                            targetLanguageCode = targetLanguageCode
-                        )
+                        translateWithProvider(confirmedSnapshot, sourceLanguageCode, targetLanguageCode)
                     }
 
                     translatedHypothesis = if (hypothesisSnapshot.isBlank()) {
                         ""
                     } else {
-                        mlKitTranslator.translate(
-                            text = hypothesisSnapshot,
-                            sourceLanguageCode = sourceLanguageCode,
-                            targetLanguageCode = targetLanguageCode
-                        )
+                        translateWithProvider(hypothesisSnapshot, sourceLanguageCode, targetLanguageCode)
                     }
                 } catch (e: UnsupportedOperationException) {
                     translatedConfirmed = confirmedSnapshot
@@ -1474,6 +1508,18 @@ class WhisperEngine(
             if (_speakTranslatedAudio.value) {
                 speakTranslatedDeltaIfNeeded(_translatedConfirmedText.value, targetLanguageCode)
             }
+        }
+    }
+
+    /** Dispatch translation to the currently selected provider. */
+    private suspend fun translateWithProvider(
+        text: String,
+        sourceLanguageCode: String,
+        targetLanguageCode: String
+    ): String {
+        return when (_translationProvider.value) {
+            TranslationProvider.ML_KIT -> mlKitTranslator.translate(text, sourceLanguageCode, targetLanguageCode)
+            TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.translate(text, sourceLanguageCode, targetLanguageCode)
         }
     }
 
@@ -1628,6 +1674,7 @@ class WhisperEngine(
         translationJob?.cancel()
         scope.cancel()
         mlKitTranslator.close()
+        androidSystemTranslator.close()
         ttsService.setPlaybackStateListener(null)
         ttsService.shutdown()
         currentEngine?.release()

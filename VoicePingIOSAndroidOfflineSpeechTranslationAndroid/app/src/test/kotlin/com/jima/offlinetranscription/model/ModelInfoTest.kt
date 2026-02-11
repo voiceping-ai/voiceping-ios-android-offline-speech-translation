@@ -10,9 +10,10 @@ class ModelInfoTest {
     @Test
     fun availableModels_hasExpectedEntries() {
         val ids = ModelInfo.availableModels.map { it.id }
-        assertEquals(2, ids.size)
+        assertEquals(3, ids.size)
         assertTrue("sensevoice-small" in ids)
-        assertTrue("android-speech" in ids)
+        assertTrue("android-speech-offline" in ids)
+        assertTrue("android-speech-online" in ids)
     }
 
     @Test
@@ -64,8 +65,9 @@ class ModelInfoTest {
 
         val androidSpeech = grouped[EngineType.ANDROID_SPEECH]
         assertNotNull(androidSpeech)
-        assertEquals(1, androidSpeech.size)
-        assertTrue(androidSpeech.any { it.id == "android-speech" })
+        assertEquals(2, androidSpeech.size)
+        assertTrue(androidSpeech.any { it.id == "android-speech-offline" })
+        assertTrue(androidSpeech.any { it.id == "android-speech-online" })
     }
 
     @Test
@@ -73,23 +75,41 @@ class ModelInfoTest {
         val sherpa = ModelInfo.availableModels.first { it.engineType == EngineType.SHERPA_ONNX }
         assertEquals("sherpa-onnx offline (ONNX Runtime)", sherpa.inferenceMethod)
 
-        val androidSpeech = ModelInfo.availableModels.first { it.engineType == EngineType.ANDROID_SPEECH }
-        assertEquals("Android SpeechRecognizer (on-device)", androidSpeech.inferenceMethod)
+        val offlineSpeech = ModelInfo.availableModels.first { it.id == "android-speech-offline" }
+        assertEquals("Android SpeechRecognizer (on-device, API 31+)", offlineSpeech.inferenceMethod)
+
+        val onlineSpeech = ModelInfo.availableModels.first { it.id == "android-speech-online" }
+        assertEquals("Android SpeechRecognizer (cloud-backed)", onlineSpeech.inferenceMethod)
     }
 
     @Test
     fun enumCardinality_isExpected() {
         assertEquals(2, EngineType.entries.size)
         assertEquals(1, SherpaModelType.entries.size)
+        assertEquals(2, AndroidSpeechMode.entries.size)
+        assertEquals(2, TranslationProvider.entries.size)
     }
 
     @Test
-    fun androidSpeechModel_hasExpectedMetadata() {
-        val model = ModelInfo.availableModels.first { it.id == "android-speech" }
-        assertEquals("Android Speech", model.displayName)
+    fun androidSpeechOfflineModel_hasExpectedMetadata() {
+        val model = ModelInfo.availableModels.first { it.id == "android-speech-offline" }
+        assertEquals("Android Speech (Offline)", model.displayName)
         assertEquals(EngineType.ANDROID_SPEECH, model.engineType)
+        assertEquals(AndroidSpeechMode.OFFLINE, model.androidSpeechMode)
         assertEquals(null, model.sherpaModelType)
-        assertTrue(model.files.isEmpty(), "Android Speech should have no files to download")
+        assertTrue(model.files.isEmpty())
+        assertEquals("0 MB", model.sizeOnDisk)
+        assertEquals("System", model.parameterCount)
+    }
+
+    @Test
+    fun androidSpeechOnlineModel_hasExpectedMetadata() {
+        val model = ModelInfo.availableModels.first { it.id == "android-speech-online" }
+        assertEquals("Android Speech (Online)", model.displayName)
+        assertEquals(EngineType.ANDROID_SPEECH, model.engineType)
+        assertEquals(AndroidSpeechMode.ONLINE, model.androidSpeechMode)
+        assertEquals(null, model.sherpaModelType)
+        assertTrue(model.files.isEmpty())
         assertEquals("0 MB", model.sizeOnDisk)
         assertEquals("System", model.parameterCount)
     }

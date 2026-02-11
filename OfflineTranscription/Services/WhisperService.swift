@@ -82,10 +82,16 @@ final class WhisperService {
         }
     }
     var translationSourceLanguageCode: String = "en" {
-        didSet { scheduleTranslationUpdate() }
+        didSet {
+            lastTranslationInput = nil
+            scheduleTranslationUpdate()
+        }
     }
     var translationTargetLanguageCode: String = "ja" {
-        didSet { scheduleTranslationUpdate() }
+        didSet {
+            lastTranslationInput = nil
+            scheduleTranslationUpdate()
+        }
     }
     var ttsRate: Float = AVSpeechUtteranceDefaultSpeechRate
     var ttsVoiceIdentifier: String?
@@ -1029,12 +1035,18 @@ final class WhisperService {
         let confirmedSnapshot = confirmedText
         let hypothesisSnapshot = hypothesisText
 
-        // Skip if text hasn't changed since last translation request.
+        // Skip if text AND language pair haven't changed since last translation request.
         if let last = lastTranslationInput,
            last.confirmed == confirmedSnapshot,
            last.hypothesis == hypothesisSnapshot {
             return
         }
+
+        NSLog("[WhisperService] scheduleTranslationUpdate: %@→%@ hasSession=%@ modelStatus=%@ textLen=%d",
+              sourceCode, targetCode,
+              translationService.hasSession ? "YES" : "NO",
+              String(describing: translationModelStatus),
+              confirmedSnapshot.count + hypothesisSnapshot.count)
 
         #if targetEnvironment(simulator)
         // iOS Simulator cannot run the native Translation framework pipeline.
@@ -1085,11 +1097,13 @@ final class WhisperService {
                 self.translatedHypothesisText = translatedHypothesis
             } catch let appError as AppError {
                 guard !Task.isCancelled else { return }
+                NSLog("[WhisperService] Translation failed (AppError): %@", appError.localizedDescription)
                 self.translatedConfirmedText = self.normalizeDisplayText(confirmedSnapshot)
                 self.translatedHypothesisText = self.normalizeDisplayText(hypothesisSnapshot)
                 warningMessage = appError.localizedDescription
             } catch {
                 guard !Task.isCancelled else { return }
+                NSLog("[WhisperService] Translation failed: %@", error.localizedDescription)
                 self.translatedConfirmedText = self.normalizeDisplayText(confirmedSnapshot)
                 self.translatedHypothesisText = self.normalizeDisplayText(hypothesisSnapshot)
                 warningMessage = AppError.translationFailed(underlying: error).localizedDescription

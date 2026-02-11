@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontFamily
 import com.voiceping.offlinetranscription.BuildConfig
 import com.voiceping.offlinetranscription.model.ModelInfo
 import com.voiceping.offlinetranscription.model.ModelState
+import com.voiceping.offlinetranscription.model.TranslationProvider
 import com.voiceping.offlinetranscription.service.E2ETestResult
 import com.voiceping.offlinetranscription.ui.components.AudioVisualizer
 import com.voiceping.offlinetranscription.ui.components.RecordButton
@@ -73,6 +74,7 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
     val translationSourceLanguageCode by viewModel.translationSourceLanguageCode.collectAsState()
     val translationTargetLanguageCode by viewModel.translationTargetLanguageCode.collectAsState()
     val ttsRate by viewModel.ttsRate.collectAsState()
+    val translationProviderState by viewModel.translationProvider.collectAsState()
     val translatedConfirmedText by viewModel.translatedConfirmedText.collectAsState()
     val translatedHypothesisText by viewModel.translatedHypothesisText.collectAsState()
     val translationWarning by viewModel.translationWarning.collectAsState()
@@ -269,6 +271,8 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                     translationSourceLanguageCode = translationSourceLanguageCode,
                     translationTargetLanguageCode = translationTargetLanguageCode,
                     ttsRate = ttsRate,
+                    translationProvider = translationProviderState,
+                    isAndroidSystemTranslationAvailable = viewModel.isAndroidSystemTranslationAvailable,
                     translatedConfirmedText = displayTranslatedConfirmedText,
                     translatedHypothesisText = displayTranslatedHypothesisText,
                     translationWarning = displayTranslationWarning,
@@ -276,7 +280,8 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                     onSpeakTranslatedAudioChange = { viewModel.setSpeakTranslatedAudio(it) },
                     onSourceLanguageChange = { viewModel.setTranslationSourceLanguageCode(it) },
                     onTargetLanguageChange = { viewModel.setTranslationTargetLanguageCode(it) },
-                    onTtsRateChange = { viewModel.setTtsRate(it) }
+                    onTtsRateChange = { viewModel.setTtsRate(it) },
+                    onTranslationProviderChange = { viewModel.setTranslationProvider(it) }
                 )
             }
 
@@ -529,6 +534,8 @@ private fun HomeLanguageSpeechCard(
     translationSourceLanguageCode: String,
     translationTargetLanguageCode: String,
     ttsRate: Float,
+    translationProvider: TranslationProvider,
+    isAndroidSystemTranslationAvailable: Boolean,
     translatedConfirmedText: String,
     translatedHypothesisText: String,
     translationWarning: String,
@@ -536,7 +543,8 @@ private fun HomeLanguageSpeechCard(
     onSpeakTranslatedAudioChange: (Boolean) -> Unit,
     onSourceLanguageChange: (String) -> Unit,
     onTargetLanguageChange: (String) -> Unit,
-    onTtsRateChange: (Float) -> Unit
+    onTtsRateChange: (Float) -> Unit,
+    onTranslationProviderChange: (TranslationProvider) -> Unit
 ) {
     val ttsText = remember(translatedConfirmedText, translatedHypothesisText) {
         listOf(translatedConfirmedText.trim(), translatedHypothesisText.trim())
@@ -584,6 +592,39 @@ private fun HomeLanguageSpeechCard(
                 enabled = translationEnabled,
                 onCheckedChange = onSpeakTranslatedAudioChange
             )
+        }
+
+        // Translation provider selector
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Translation Provider", style = MaterialTheme.typography.bodyMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TranslationProvider.entries.forEach { provider ->
+                    val enabled = translationEnabled && (
+                        provider != TranslationProvider.ANDROID_SYSTEM || isAndroidSystemTranslationAvailable
+                    )
+                    FilterChip(
+                        selected = translationProvider == provider,
+                        onClick = { if (enabled) onTranslationProviderChange(provider) },
+                        label = {
+                            Text(
+                                when (provider) {
+                                    TranslationProvider.ML_KIT -> "ML Kit"
+                                    TranslationProvider.ANDROID_SYSTEM -> "System"
+                                },
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        },
+                        enabled = enabled,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            }
         }
 
         Row(

@@ -119,14 +119,19 @@ final class SherpaOnnxOfflineEngine: ASREngine {
         NSLog("[SherpaOnnxOfflineEngine] Decode took %.3fs result_len=%d lang=\"%@\" text=\"%@\"",
               decodeEnd - decodeStart, text.count, result.lang, String(text.prefix(200)))
 
-        // SenseVoice provides language detection
-        let detectedLang: String? = result.lang.isEmpty ? nil : result.lang
+        // SenseVoice provides language detection.
+        // Normalize: strip angle-bracket tokens (e.g. "<|en|>" → "en") so the
+        // language code is clean for translation and locale matching.
+        let detectedLang: String? = {
+            let raw = result.lang.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !raw.isEmpty else { return nil }
+            return raw.replacingOccurrences(of: "<|", with: "")
+                .replacingOccurrences(of: "|>", with: "")
+        }()
 
         // Strip spurious spaces from CJK output. SenseVoice's BPE decoder
         // sometimes inserts word-boundary spaces that are wrong for ja/zh/ko.
-        if let lang = detectedLang {
-            let langCode = lang.replacingOccurrences(of: "<|", with: "")
-                .replacingOccurrences(of: "|>", with: "")
+        if let langCode = detectedLang {
             if ["ja", "zh", "ko", "yue"].contains(langCode) {
                 let before = text
                 text = Self.stripCJKSpaces(text)

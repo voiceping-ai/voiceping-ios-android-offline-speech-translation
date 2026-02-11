@@ -748,13 +748,19 @@ struct TranslationBridgeView: View {
     }
 
     private func prepareModels(session: TranslationSession) async {
-        let src = Locale.Language(identifier: whisperService.translationSourceLanguageCode)
-        let tgt = Locale.Language(identifier: whisperService.translationTargetLanguageCode)
+        let srcCode = whisperService.translationSourceLanguageCode
+        let tgtCode = whisperService.translationTargetLanguageCode
+        let src = Locale.Language(identifier: srcCode)
+        let tgt = Locale.Language(identifier: tgtCode)
 
+        NSLog("[TranslationBridge] prepareModels: %@→%@", srcCode, tgtCode)
         whisperService.setTranslationModelStatus(.checking)
 
         let availability = LanguageAvailability()
         let status = await availability.status(from: src, to: tgt)
+
+        NSLog("[TranslationBridge] availability status: %@ for %@→%@",
+              String(describing: status), srcCode, tgtCode)
 
         switch status {
         case .installed:
@@ -767,15 +773,18 @@ struct TranslationBridgeView: View {
             do {
                 try await session.prepareTranslation()
                 guard !Task.isCancelled else { return }
+                NSLog("[TranslationBridge] prepareTranslation() succeeded for %@→%@", srcCode, tgtCode)
                 whisperService.setTranslationModelStatus(.ready)
             } catch {
                 guard !Task.isCancelled else { return }
+                NSLog("[TranslationBridge] prepareTranslation() failed: %@", error.localizedDescription)
                 whisperService.setTranslationModelStatus(
                     .failed(error.localizedDescription)
                 )
             }
 
         case .unsupported:
+            NSLog("[TranslationBridge] Language pair %@→%@ is unsupported", srcCode, tgtCode)
             whisperService.setTranslationModelStatus(.unsupported)
 
         @unknown default:
@@ -796,6 +805,7 @@ struct TranslationBridgeView: View {
             config = nil
             return
         }
+        NSLog("[TranslationBridge] updateConfig: %@→%@", src, tgt)
         config = TranslationSession.Configuration(
             source: Locale.Language(identifier: src),
             target: Locale.Language(identifier: tgt)

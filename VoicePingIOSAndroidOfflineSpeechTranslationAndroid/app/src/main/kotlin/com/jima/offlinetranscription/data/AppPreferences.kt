@@ -22,6 +22,7 @@ class AppPreferences(private val context: Context) {
         private val TRANSLATION_SOURCE_LANGUAGE = stringPreferencesKey("translation_source_language")
         private val TRANSLATION_TARGET_LANGUAGE = stringPreferencesKey("translation_target_language")
         private val TTS_RATE = stringPreferencesKey("tts_rate")
+        private val TRANSLATION_PROVIDER = stringPreferencesKey("translation_provider")
     }
 
     val selectedModelId: Flow<String?> = context.dataStore.data.map { it[SELECTED_MODEL_ID] }
@@ -35,6 +36,7 @@ class AppPreferences(private val context: Context) {
     val ttsRate: Flow<Float> = context.dataStore.data.map { prefs ->
         prefs[TTS_RATE]?.toFloatOrNull() ?: 1.0f
     }
+    val translationProvider: Flow<String> = context.dataStore.data.map { it[TRANSLATION_PROVIDER] ?: "ML_KIT" }
 
     suspend fun setSelectedModelId(id: String) {
         context.dataStore.edit { it[SELECTED_MODEL_ID] = id }
@@ -70,5 +72,9 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setTtsRate(rate: Float) {
         context.dataStore.edit { it[TTS_RATE] = rate.toString() }
+    }
+
+    suspend fun setTranslationProvider(provider: String) {
+        context.dataStore.edit { it[TRANSLATION_PROVIDER] = provider }
     }
 }

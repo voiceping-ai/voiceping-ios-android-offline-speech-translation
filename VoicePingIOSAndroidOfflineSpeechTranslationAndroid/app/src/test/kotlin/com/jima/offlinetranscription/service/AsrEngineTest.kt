@@ -1,5 +1,6 @@
 package com.voiceping.offlinetranscription.service
 
+import com.voiceping.offlinetranscription.model.AndroidSpeechMode
 import com.voiceping.offlinetranscription.model.EngineType
 import com.voiceping.offlinetranscription.model.ModelInfo
 import com.voiceping.offlinetranscription.model.SherpaModelType
@@ -45,11 +46,17 @@ class AsrEngineTest {
     }
 
     @Test
-    fun androidSpeechModel_hasNoFilesAndCorrectEngine() {
-        val model = ModelInfo.availableModels.firstOrNull { it.engineType == EngineType.ANDROID_SPEECH }
-        assertNotNull(model)
-        assertEquals("android-speech", model.id)
-        assertTrue(model.files.isEmpty(), "Android Speech model should have no files to download")
+    fun androidSpeechModels_haveNoFilesAndCorrectEngine() {
+        val models = ModelInfo.availableModels.filter { it.engineType == EngineType.ANDROID_SPEECH }
+        assertEquals(2, models.size)
+
+        val offline = models.first { it.id == "android-speech-offline" }
+        assertEquals(AndroidSpeechMode.OFFLINE, offline.androidSpeechMode)
+        assertTrue(offline.files.isEmpty())
+
+        val online = models.first { it.id == "android-speech-online" }
+        assertEquals(AndroidSpeechMode.ONLINE, online.androidSpeechMode)
+        assertTrue(online.files.isEmpty())
     }
 
     @Test
