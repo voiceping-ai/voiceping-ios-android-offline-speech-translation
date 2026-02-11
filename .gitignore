@@ -32,6 +32,8 @@ xcuserdata/
 
 # Xcode auto-generated but regeneratable via xcodegen
 VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj/project.pbxproj
+VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj/xcshareddata/
+project.local.yml
 
 # iOS dependency managers
 Pods/

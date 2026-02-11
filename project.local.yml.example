@@ -1,0 +1,27 @@
+include:
+  - project.yml
+
+targets:
+  OfflineTranscription:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.voiceping.translate
+        DEVELOPMENT_TEAM: ABCDE12345
+
+  OfflineTranscriptionTests:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.voiceping.translate-tests
+        DEVELOPMENT_TEAM: ABCDE12345
+
+  OfflineTranscriptionUITests:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.voiceping.translate-uitests
+        DEVELOPMENT_TEAM: ABCDE12345
+
+  OfflineTranscriptionCITests:
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.voiceping.translate-ci-tests
+        DEVELOPMENT_TEAM: ABCDE12345
