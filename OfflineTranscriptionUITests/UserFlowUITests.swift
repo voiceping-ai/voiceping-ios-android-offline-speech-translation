@@ -542,6 +542,51 @@ final class UserFlowUITests: XCTestCase {
         )
     }
 
+    // MARK: - Test 11: System Broadcast Mode UI
+
+    func test_11_systemBroadcastModeUI() {
+        let app = launchApp(modelId: "sensevoice-small")
+        waitForModelLoad(app)
+
+        captureScreenshot(app, step: "01_voice_mode")
+
+        // Switch to System mode
+        let audioSourcePicker = app.segmentedControls["audio_source_picker"]
+        XCTAssertTrue(
+            audioSourcePicker.waitForExistence(timeout: shortTimeout),
+            "Audio source picker should exist"
+        )
+        let systemButton = audioSourcePicker.buttons["System"]
+        XCTAssertTrue(systemButton.exists, "System segment should exist")
+        systemButton.tap()
+        sleep(1)
+
+        captureScreenshot(app, step: "02_system_mode")
+
+        // Verify broadcast picker appears
+        let broadcastPicker = app.otherElements["broadcast_picker"]
+        XCTAssertTrue(
+            broadcastPicker.waitForExistence(timeout: shortTimeout),
+            "Broadcast picker should appear in System mode"
+        )
+
+        captureScreenshot(app, step: "03_broadcast_picker_visible")
+
+        // Tap the broadcast picker (on simulator, the system sheet won't appear
+        // because ReplayKit requires a real device, but we verify the UI is present)
+        broadcastPicker.tap()
+        sleep(2)
+
+        captureScreenshot(app, step: "04_after_broadcast_tap")
+
+        // Switch back to Voice mode
+        let voiceButton = audioSourcePicker.buttons["Voice"]
+        voiceButton.tap()
+        sleep(1)
+
+        captureScreenshot(app, step: "05_back_to_voice")
+    }
+
     // MARK: - Helpers
 
     private func launchApp(

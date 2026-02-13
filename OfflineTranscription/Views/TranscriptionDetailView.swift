@@ -28,6 +28,10 @@ struct TranscriptionDetailView: View {
                     .font(.body)
                     .textSelection(.enabled)
                     .accessibilityIdentifier("detail_text")
+
+                AppVersionLabel()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 8)
             }
             .padding()
         }

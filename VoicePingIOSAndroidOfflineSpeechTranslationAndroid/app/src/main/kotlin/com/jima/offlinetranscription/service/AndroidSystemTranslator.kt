@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -99,6 +100,7 @@ class AndroidSystemTranslator(private val context: Context) {
         currentTargetLang = null
         _modelReady.value = false
         _downloadStatus.value = null
+        executor.shutdown()
     }
 
     private suspend fun ensureTranslator(sourceLang: String, targetLang: String) {
@@ -125,31 +127,45 @@ class AndroidSystemTranslator(private val context: Context) {
         val tm = context.getSystemService(TranslationManager::class.java)
             ?: throw UnsupportedOperationException("TranslationManager not available on this device.")
 
+        // Defensive normalization: strip SenseVoice "<|en|>" markers and region subtags
+        val normalizedSource = sourceLang.replace("<|", "").replace("|>", "")
+            .trim().lowercase().split("-").first()
+        val normalizedTarget = targetLang.replace("<|", "").replace("|>", "")
+            .trim().lowercase().split("-").first()
+
+        if (normalizedSource.isBlank() || normalizedTarget.isBlank()) {
+            throw UnsupportedOperationException(
+                "Invalid language codes: source='$sourceLang', target='$targetLang'"
+            )
+        }
+
         val sourceSpec = TranslationSpec(
-            ULocale(sourceLang),
+            ULocale(normalizedSource),
             TranslationSpec.DATA_FORMAT_TEXT
         )
         val targetSpec = TranslationSpec(
-            ULocale(targetLang),
+            ULocale(normalizedTarget),
             TranslationSpec.DATA_FORMAT_TEXT
         )
 
         val translationContext = TranslationContext.Builder(sourceSpec, targetSpec).build()
 
-        val newTranslator = suspendCancellableCoroutine { continuation ->
-            tm.createOnDeviceTranslator(translationContext, executor) { translator ->
-                if (continuation.isActive) {
-                    continuation.resume(translator)
+        val newTranslator = withTimeout(15_000) {
+            suspendCancellableCoroutine { continuation ->
+                tm.createOnDeviceTranslator(translationContext, executor) { translator ->
+                    if (continuation.isActive) {
+                        continuation.resume(translator)
+                    }
                 }
             }
         }
 
         translator = newTranslator
-        currentSourceLang = sourceLang
-        currentTargetLang = targetLang
+        currentSourceLang = normalizedSource
+        currentTargetLang = normalizedTarget
         _modelReady.value = true
         _downloadStatus.value = null
-        Log.i(TAG, "System translator ready: $sourceLang -> $targetLang")
+        Log.i(TAG, "System translator ready: $normalizedSource -> $normalizedTarget")
     }
 
     private suspend fun doTranslate(translator: Translator, text: String): String {

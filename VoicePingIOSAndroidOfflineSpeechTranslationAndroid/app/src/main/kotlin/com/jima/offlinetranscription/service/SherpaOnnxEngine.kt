@@ -78,7 +78,12 @@ class SherpaOnnxEngine(
 
                     val text = result.text.trim()
                     val timestamps = result.timestamps
+                    // SenseVoice returns language codes in "<|en|>" format — normalize
+                    // to plain BCP-47 (e.g. "en"). Same fix as iOS SherpaOnnxOfflineEngine.
                     val lang = result.lang.takeIf { it.isNotBlank() }
+                        ?.replace("<|", "")?.replace("|>", "")
+                        ?.trim()?.lowercase()
+                        ?.takeIf { it.isNotBlank() }
 
                     val decodeElapsedSec = (System.nanoTime() - decodeStartNs) / 1_000_000_000.0
                     Log.i(

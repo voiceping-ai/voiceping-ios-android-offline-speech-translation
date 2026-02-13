@@ -92,7 +92,10 @@ class AndroidSpeechEngine(
 
         confirmedText = ""
         hypothesisText = ""
-        detectedLanguage = null
+        // SpeechRecognizer API doesn't expose detected language in results,
+        // but we know the recognizer locale. Use its base language code so
+        // translation auto-swap has something to work with.
+        detectedLanguage = Locale.getDefault().language.takeIf { it.isNotBlank() }
 
         val sr = when (mode) {
             AndroidSpeechMode.OFFLINE -> {

@@ -221,32 +221,18 @@ struct TranscriptionView: View {
                 .padding(.top, 4)
             }
 
-            // Audio source selector
-            if viewModel != nil, !(viewModel?.isRecording ?? false) {
+            // Audio capture mode picker
+            if viewModel != nil {
                 @Bindable var service = whisperService
                 Picker("Audio Source", selection: $service.audioCaptureMode) {
-                    Label("Voice", systemImage: "mic.fill").tag(AudioCaptureMode.microphone)
-                    Label("System", systemImage: "rectangle.dashed.badge.record").tag(AudioCaptureMode.systemBroadcast)
+                    Text("Voice").tag(AudioCaptureMode.microphone)
+                    Text("System").tag(AudioCaptureMode.systemBroadcast)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
-                .accessibilityIdentifier("audio_source_picker")
-            }
-
-            // System broadcast info + picker
-            if whisperService.audioCaptureMode == .systemBroadcast, !(viewModel?.isRecording ?? false) {
-                VStack(spacing: 8) {
-                    Text("Tap to start system audio capture (ReplayKit). For privacy, iOS does not expose carrier phone-call audio to third-party apps.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-
-                    BroadcastPickerView()
-                        .frame(width: 50, height: 50)
-                        .accessibilityIdentifier("broadcast_picker")
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 4)
+                .padding(.top, 4)
+                .disabled(whisperService.isRecording)
+                .accessibilityIdentifier("audio_mode_picker")
             }
 
             // Controls
@@ -276,11 +262,24 @@ struct TranscriptionView: View {
                 }
                 #endif
 
-                RecordButton(
-                    isRecording: viewModel?.isRecording ?? false
-                ) {
-                    Task {
-                        await viewModel?.toggleRecording()
+                if whisperService.audioCaptureMode == .systemBroadcast {
+                    if whisperService.isBroadcastActive {
+                        // Broadcast is running — show stop button (reuse RecordButton in recording state)
+                        RecordButton(isRecording: true) {
+                            Task {
+                                await viewModel?.toggleRecording()
+                            }
+                        }
+                    } else {
+                        BroadcastStartButton()
+                    }
+                } else {
+                    RecordButton(
+                        isRecording: viewModel?.isRecording ?? false
+                    ) {
+                        Task {
+                            await viewModel?.toggleRecording()
+                        }
                     }
                 }
 
@@ -293,6 +292,9 @@ struct TranscriptionView: View {
                 .accessibilityIdentifier("settings_button")
             }
             .padding()
+
+            AppVersionLabel()
+                .padding(.bottom, 4)
         }
         .navigationTitle("Transcribe")
         .navigationBarTitleDisplayMode(.inline)
@@ -408,12 +410,7 @@ struct TranscriptionView: View {
     }
 
     private var placeholderText: String {
-        switch whisperService.audioCaptureMode {
-        case .systemBroadcast:
-            return "Start a system broadcast above, then audio from other apps will be transcribed."
-        case .microphone:
-            return "Tap the microphone button to start transcribing."
-        }
+        "Tap the microphone button to start transcribing."
     }
 
     private var interruptedBanner: some View {
@@ -480,6 +477,12 @@ struct ModelSettingsSheet: View {
                         .accessibilityIdentifier("vad_toggle")
                     Toggle("Enable Timestamps", isOn: $service.enableTimestamps)
                         .accessibilityIdentifier("timestamps_toggle")
+                }
+
+                Section {
+                    AppVersionLabel()
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .listRowBackground(Color.clear)
                 }
             }
             .navigationTitle("Settings")

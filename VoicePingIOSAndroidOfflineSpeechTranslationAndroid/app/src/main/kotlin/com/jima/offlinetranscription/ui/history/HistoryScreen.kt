@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.voiceping.offlinetranscription.data.TranscriptionEntity
+import com.voiceping.offlinetranscription.ui.components.AppVersionLabel
 import com.voiceping.offlinetranscription.util.FormatUtils
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,6 +75,16 @@ fun HistoryScreen(
                         onClick = { onRecordClick(record.id) },
                         onDelete = { viewModel.deleteRecord(record) }
                     )
+                }
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppVersionLabel()
+                    }
                 }
             }
         }

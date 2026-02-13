@@ -97,13 +97,19 @@ class MlKitTranslator {
     private suspend fun ensureTranslator(sourceLang: String, targetLang: String) {
         if (sourceLang == currentSourceLang &&
             targetLang == currentTargetLang &&
-            translator != null
+            translator != null &&
+            _modelReady.value
         ) {
             return
         }
 
         // Close previous translator
         translator?.close()
+        translator = null
+        currentSourceLang = null
+        currentTargetLang = null
+        _modelReady.value = false
+        _downloadStatus.value = "Downloading translation model..."
 
         val options = TranslatorOptions.Builder()
             .setSourceLanguage(sourceLang)
@@ -111,11 +117,6 @@ class MlKitTranslator {
             .build()
 
         val newTranslator = Translation.getClient(options)
-        translator = newTranslator
-        currentSourceLang = sourceLang
-        currentTargetLang = targetLang
-        _modelReady.value = false
-        _downloadStatus.value = "Downloading translation model..."
 
         // Download model if needed (wifi not required for offline-first app)
         val conditions = DownloadConditions.Builder().build()
@@ -123,6 +124,10 @@ class MlKitTranslator {
         suspendCancellableCoroutine { continuation ->
             newTranslator.downloadModelIfNeeded(conditions)
                 .addOnSuccessListener {
+                    // Only assign after download succeeds to avoid stale translator on cancellation
+                    translator = newTranslator
+                    currentSourceLang = sourceLang
+                    currentTargetLang = targetLang
                     _modelReady.value = true
                     _downloadStatus.value = null
                     Log.i(TAG, "Translation model ready: $sourceLang -> $targetLang")
@@ -131,6 +136,7 @@ class MlKitTranslator {
                     }
                 }
                 .addOnFailureListener { e ->
+                    newTranslator.close()
                     _modelReady.value = false
                     _downloadStatus.value = "Model download failed: ${e.localizedMessage}"
                     Log.e(TAG, "Failed to download translation model: $sourceLang -> $targetLang", e)
@@ -146,7 +152,11 @@ class MlKitTranslator {
      * ML Kit uses BCP-47 codes directly, but we validate against supported languages.
      */
     private fun toMlKitLanguage(bcp47Code: String): String? {
-        val code = bcp47Code.lowercase().split("-").first()
-        return if (TranslateLanguage.getAllLanguages().contains(code)) code else null
+        // Defensive normalization: strip SenseVoice "<|en|>" markers and region subtags
+        val code = bcp47Code
+            .replace("<|", "").replace("|>", "")
+            .trim().lowercase()
+            .split("-").first()
+        return if (code.isNotBlank() && TranslateLanguage.getAllLanguages().contains(code)) code else null
     }
 }

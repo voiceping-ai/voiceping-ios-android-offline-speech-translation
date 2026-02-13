@@ -32,12 +32,11 @@ targets:
     sources:
       - path: OfflineTranscription
       - path: Shared
-    entitlements:
-      path: OfflineTranscription/OfflineTranscription.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.voiceping.translate
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: OfflineTranscription/OfflineTranscription.entitlements
         GENERATE_INFOPLIST_FILE: "YES"
         CURRENT_PROJECT_VERSION: "1"
         MARKETING_VERSION: "1.0.0"
@@ -53,6 +52,9 @@ targets:
     dependencies:
       - package: SherpaOnnxKit
         product: SherpaOnnxKit
+      - target: BroadcastUploadExtension
+        embed: true
+        codeSign: true
 
   BroadcastUploadExtension:
     type: app-extension
@@ -63,12 +65,11 @@ targets:
           - "*.plist"
           - "*.entitlements"
       - path: Shared
-    entitlements:
-      path: BroadcastUploadExtension/BroadcastUploadExtension.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.voiceping.translate.broadcast
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_ENTITLEMENTS: BroadcastUploadExtension/BroadcastUploadExtension.entitlements
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: BroadcastUploadExtension/Info.plist
         CURRENT_PROJECT_VERSION: "1"

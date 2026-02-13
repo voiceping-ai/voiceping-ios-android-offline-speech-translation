@@ -19,6 +19,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.voiceping.offlinetranscription.data.TranscriptionEntity
 import com.voiceping.offlinetranscription.service.AudioPlaybackManager
+import com.voiceping.offlinetranscription.ui.components.AppVersionLabel
 import com.voiceping.offlinetranscription.ui.components.WaveformScrubber
 import com.voiceping.offlinetranscription.util.FormatUtils
 import com.voiceping.offlinetranscription.util.SessionExporter
@@ -180,6 +181,11 @@ fun HistoryDetailScreen(
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            AppVersionLabel(
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

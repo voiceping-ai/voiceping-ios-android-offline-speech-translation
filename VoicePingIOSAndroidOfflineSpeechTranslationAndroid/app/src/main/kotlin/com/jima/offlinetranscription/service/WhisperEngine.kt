@@ -150,17 +150,25 @@ class WhisperEngine(
     private val _translationProvider = MutableStateFlow(TranslationProvider.ML_KIT)
     val translationProvider: StateFlow<TranslationProvider> = _translationProvider.asStateFlow()
 
-    val translationModelReady: StateFlow<Boolean>
-        get() = when (_translationProvider.value) {
-            TranslationProvider.ML_KIT -> mlKitTranslator.modelReady
-            TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.modelReady
-        }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val translationModelReady: StateFlow<Boolean> by lazy {
+        _translationProvider.flatMapLatest { provider ->
+            when (provider) {
+                TranslationProvider.ML_KIT -> mlKitTranslator.modelReady
+                TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.modelReady
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, false)
+    }
 
-    val translationDownloadStatus: StateFlow<String?>
-        get() = when (_translationProvider.value) {
-            TranslationProvider.ML_KIT -> mlKitTranslator.downloadStatus
-            TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.downloadStatus
-        }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val translationDownloadStatus: StateFlow<String?> by lazy {
+        _translationProvider.flatMapLatest { provider ->
+            when (provider) {
+                TranslationProvider.ML_KIT -> mlKitTranslator.downloadStatus
+                TranslationProvider.ANDROID_SYSTEM -> androidSystemTranslator.downloadStatus
+            }
+        }.stateIn(scope, SharingStarted.Eagerly, null)
+    }
 
     val isAndroidSystemTranslationAvailable: Boolean
         get() = androidSystemTranslator.isAvailable
@@ -234,6 +242,20 @@ class WhisperEngine(
         private val SPACE_BEFORE_CJK_PUNCT_REGEX = "\\s+([、。！？：；）」』】〉》])".toRegex()
         private val SPACE_AFTER_CJK_OPEN_PUNCT_REGEX = "([（「『【〈《])\\s+".toRegex()
         private val SPACE_AFTER_CJK_END_PUNCT_REGEX = "([、。！？：；])\\s+($CJK_CHAR_CLASS)".toRegex()
+
+        /**
+         * Normalize a language code from any ASR engine into plain BCP-47 base form.
+         * Handles SenseVoice's "<|en|>" format, strips region subtags, lowercases.
+         * Returns null if the input is blank or empty after normalization.
+         */
+        fun normalizeLanguageCode(raw: String?): String? {
+            if (raw.isNullOrBlank()) return null
+            val cleaned = raw
+                .replace("<|", "").replace("|>", "")
+                .trim().lowercase()
+                .split("-").first()  // "en-US" → "en"
+            return cleaned.takeIf { it.isNotBlank() && it.all { c -> c.isLetter() } }
+        }
     }
 
     val fullTranscriptionText: String
@@ -245,6 +267,7 @@ class WhisperEngine(
     init {
         ttsService.setPlaybackStateListener { speaking ->
             scope.launch {
+                Log.i("WhisperEngine", "TTS playback state changed: speaking=$speaking, micStoppedForTts=$micStoppedForTts, session=${_sessionState.value}")
                 if (speaking) {
                     if (audioRecorder.isRecording) {
                         ttsMicGuardViolations += 1
@@ -292,16 +315,20 @@ class WhisperEngine(
         }
         scope.launch {
             preferences.translationSourceLanguage.collect { code ->
-                _translationSourceLanguageCode.value = code
-                lastTranslationInput = null
-                scheduleTranslationUpdate()
+                if (code != _translationSourceLanguageCode.value) {
+                    _translationSourceLanguageCode.value = code
+                    lastTranslationInput = null
+                    scheduleTranslationUpdate()
+                }
             }
         }
         scope.launch {
             preferences.translationTargetLanguage.collect { code ->
-                _translationTargetLanguageCode.value = code
-                lastTranslationInput = null
-                scheduleTranslationUpdate()
+                if (code != _translationTargetLanguageCode.value) {
+                    _translationTargetLanguageCode.value = code
+                    lastTranslationInput = null
+                    scheduleTranslationUpdate()
+                }
             }
         }
         scope.launch {
@@ -316,9 +343,11 @@ class WhisperEngine(
                 } catch (_: IllegalArgumentException) {
                     TranslationProvider.ML_KIT
                 }
-                _translationProvider.value = provider
-                lastTranslationInput = null
-                scheduleTranslationUpdate()
+                if (provider != _translationProvider.value) {
+                    _translationProvider.value = provider
+                    lastTranslationInput = null
+                    scheduleTranslationUpdate()
+                }
             }
         }
         scope.launch(Dispatchers.Default) {
@@ -531,20 +560,22 @@ class WhisperEngine(
     }
 
     suspend fun setTranslationSourceLanguageCode(languageCode: String) {
-        val normalized = languageCode.trim().lowercase()
-        if (normalized.isEmpty()) return
+        val normalized = normalizeLanguageCode(languageCode) ?: return
         _translationSourceLanguageCode.value = normalized
         preferences.setTranslationSourceLanguage(normalized)
         lastTranslationInput = null
+        lastSpokenTranslatedConfirmed = ""  // Clear TTS cache — language changed
+        ttsService.stop()
         scheduleTranslationUpdate()
     }
 
     suspend fun setTranslationTargetLanguageCode(languageCode: String) {
-        val normalized = languageCode.trim().lowercase()
-        if (normalized.isEmpty()) return
+        val normalized = normalizeLanguageCode(languageCode) ?: return
         _translationTargetLanguageCode.value = normalized
         preferences.setTranslationTargetLanguage(normalized)
         lastTranslationInput = null
+        lastSpokenTranslatedConfirmed = ""  // Clear TTS cache — language changed
+        ttsService.stop()
         scheduleTranslationUpdate()
     }
 
@@ -645,6 +676,18 @@ class WhisperEngine(
             return
         }
 
+        // Ensure the MediaProjection foreground service is running for system audio capture.
+        // It may have been stopped after a previous recording session.
+        if (_audioInputMode.value == AudioInputMode.SYSTEM_PLAYBACK) {
+            try {
+                context.startForegroundService(
+                    Intent(context, MediaProjectionService::class.java)
+                )
+            } catch (e: Exception) {
+                Log.w("WhisperEngine", "Failed to start MediaProjectionService: ${e.message}")
+            }
+        }
+
         resetTranscriptionState()
         ttsService.stop()
         transitionTo(SessionState.Recording)
@@ -691,6 +734,12 @@ class WhisperEngine(
                     audioRecorder.startRecording(_audioInputMode.value)
                 } catch (e: Throwable) {
                     if (!isSessionActive(activeSessionToken)) return@launch
+                    // If system audio capture failed, clear the stale permission
+                    // so the user is prompted to re-authorize on next attempt.
+                    if (_audioInputMode.value == AudioInputMode.SYSTEM_PLAYBACK) {
+                        audioRecorder.clearSystemAudioCapturePermission()
+                        _systemAudioCaptureReady.value = false
+                    }
                     withContext(Dispatchers.Main) {
                         _lastError.value = AppError.TranscriptionFailed(e)
                         transitionTo(SessionState.Error)
@@ -727,6 +776,17 @@ class WhisperEngine(
         invalidateSession()
         cancelTranscriptionJob()
 
+        // Stop the MediaProjection foreground service if it was running
+        if (_audioInputMode.value == AudioInputMode.SYSTEM_PLAYBACK) {
+            try {
+                context.stopService(
+                    android.content.Intent(context, MediaProjectionService::class.java)
+                )
+            } catch (e: Exception) {
+                Log.w("WhisperEngine", "Failed to stop MediaProjectionService: ${e.message}")
+            }
+        }
+
         transitionTo(SessionState.Idle)
     }
 
@@ -742,6 +802,14 @@ class WhisperEngine(
         cancelRecorderAndEnergyJobsAndWait()
         invalidateSession()
         cancelTranscriptionJobAndWait()
+        // Stop MediaProjection foreground service if running
+        if (_audioInputMode.value == AudioInputMode.SYSTEM_PLAYBACK) {
+            try {
+                context.stopService(
+                    android.content.Intent(context, MediaProjectionService::class.java)
+                )
+            } catch (_: Exception) {}
+        }
         transitionTo(SessionState.Idle)
     }
 
@@ -750,27 +818,48 @@ class WhisperEngine(
         if (!micStoppedForTts) return
         micStoppedForTts = false
 
-        if (_sessionState.value != SessionState.Idle) return
+        if (_sessionState.value != SessionState.Idle) {
+            Log.i("WhisperEngine", "Skipping TTS resume — session not idle (state=${_sessionState.value})")
+            return
+        }
         val engine = currentEngine
         if (engine == null || !engine.isLoaded) return
 
-        Log.i("WhisperEngine", "Resuming recording after TTS playback")
+        Log.i("WhisperEngine", "Resuming recording after TTS playback — draining old jobs first")
+
+        // Wait for any lingering jobs to fully complete to avoid concurrent inference
+        cancelTranscriptionJobAndWait()
+        cancelRecorderAndEnergyJobsAndWait()
+
+        // Re-check state after draining — user may have acted while we waited
+        if (_sessionState.value != SessionState.Idle) {
+            Log.i("WhisperEngine", "Skipping TTS resume — session changed during drain (state=${_sessionState.value})")
+            return
+        }
 
         // Reset audio buffer tracking for fresh recorder state
         lastBufferSize = 0
         hasCompletedFirstInference = false
         realtimeInferenceCount = 0
+        // Clear translation cache so new speech after TTS triggers fresh translation
+        lastTranslationInput = null
+        lastSpokenTranslatedConfirmed = ""
+
+        // Ensure foreground service is running for system audio capture
+        if (_audioInputMode.value == AudioInputMode.SYSTEM_PLAYBACK) {
+            try {
+                context.startForegroundService(
+                    Intent(context, MediaProjectionService::class.java)
+                )
+            } catch (e: Exception) {
+                Log.w("WhisperEngine", "Failed to start MediaProjectionService on TTS resume: ${e.message}")
+            }
+        }
 
         transitionTo(SessionState.Recording)
         recordingStartElapsedMs = SystemClock.elapsedRealtime()
 
         val activeSessionToken = nextSessionToken()
-        transcriptionJob?.cancel()
-        recordingJob?.cancel()
-        energyJob?.cancel()
-        transcriptionJob = null
-        recordingJob = null
-        energyJob = null
 
         if (engine.isSelfRecording) {
             engine.startListening()
@@ -953,7 +1042,7 @@ class WhisperEngine(
                                         chunkManager.finalizeTrailing(segments, slice.sliceOffsetMs)
                                         _confirmedText.value = chunkManager.confirmedText
                                         _hypothesisText.value = ""
-                                        val lang = segments.firstOrNull()?.detectedLanguage
+                                        val lang = normalizeLanguageCode(segments.firstOrNull()?.detectedLanguage)
                                         if (lang != null) _detectedLanguage.value = lang
                                         Log.i("WhisperEngine", "realtimeLoop final pass: ${segments.size} segments, text='${chunkManager.confirmedText.takeLast(60)}'")
                                     }
@@ -993,7 +1082,7 @@ class WhisperEngine(
                     lastConfirmed = confirmed
                     lastHypothesis = hypothesis
 
-                    val lang = engine.getDetectedLanguage()
+                    val lang = normalizeLanguageCode(engine.getDetectedLanguage())
                     if (lang != null && lang != _detectedLanguage.value) {
                         _detectedLanguage.value = lang
                         applyDetectedLanguageToTranslation(lang)
@@ -1171,7 +1260,7 @@ class WhisperEngine(
 
         if (newSegments.isNotEmpty()) {
             chunkManager.consecutiveSilentWindows = 0
-            val lang = newSegments.firstOrNull()?.detectedLanguage
+            val lang = normalizeLanguageCode(newSegments.firstOrNull()?.detectedLanguage)
             if (lang != null && lang != _detectedLanguage.value) {
                 _detectedLanguage.value = lang
                 applyDetectedLanguageToTranslation(lang)
@@ -1248,10 +1337,17 @@ class WhisperEngine(
         val currentTarget = _translationTargetLanguageCode.value
 
         if (lang == currentTarget && lang != currentSource) {
-            Log.i("WhisperEngine", "Detected language '$lang' matches target — swapping translation direction")
+            Log.i("WhisperEngine", "Detected language '$lang' matches target — swapping translation direction ($currentSource→$currentTarget becomes $currentTarget→$currentSource)")
             _translationSourceLanguageCode.value = currentTarget
             _translationTargetLanguageCode.value = currentSource
+            // Persist swapped direction so it survives app restart
+            scope.launch {
+                preferences.setTranslationSourceLanguage(currentTarget)
+                preferences.setTranslationTargetLanguage(currentSource)
+            }
+            lastTranslationInput = null  // Force re-translation after swap
             resetTranslationState(stopTts = true)
+            scheduleTranslationUpdate()
         } else if (lang != currentSource && lang != currentTarget) {
             Log.i("WhisperEngine", "Detected language '$lang' not in pair ($currentSource→$currentTarget) — ignoring")
         }
@@ -1352,7 +1448,7 @@ class WhisperEngine(
                     _tokensPerSecond.value = totalWords / elapsed
                 }
                 // Apply detected language to translation direction
-                val lang = segments.firstOrNull()?.detectedLanguage
+                val lang = normalizeLanguageCode(segments.firstOrNull()?.detectedLanguage)
                 if (lang != null && lang != _detectedLanguage.value) {
                     _detectedLanguage.value = lang
                     applyDetectedLanguageToTranslation(lang)
@@ -1606,17 +1702,27 @@ class WhisperEngine(
             return
         }
 
-        val confirmedSnapshot = _confirmedText.value.trim()
-        val hypothesisSnapshot = _hypothesisText.value.trim()
-        val sourceLanguageCode = _translationSourceLanguageCode.value.trim().lowercase()
-        val targetLanguageCode = _translationTargetLanguageCode.value.trim().lowercase()
-
-        if (sourceLanguageCode.isEmpty() || targetLanguageCode.isEmpty()) return
-
-        val currentInput = confirmedSnapshot to hypothesisSnapshot
-        if (lastTranslationInput == currentInput) return
+        // Quick-check: skip scheduling if language codes are not configured
+        val srcCheck = _translationSourceLanguageCode.value.trim()
+        val tgtCheck = _translationTargetLanguageCode.value.trim()
+        if (srcCheck.isEmpty() || tgtCheck.isEmpty()) return
 
         translationJob = scope.launch(Dispatchers.Default) {
+            // Debounce: coalesce rapid updates (e.g. during fast speech)
+            // so we don't cancel in-flight translations repeatedly.
+            delay(150)
+
+            // Re-read after debounce for latest values
+            val confirmedSnapshot = _confirmedText.value.trim()
+            val hypothesisSnapshot = _hypothesisText.value.trim()
+            val sourceLanguageCode = _translationSourceLanguageCode.value.trim().lowercase()
+            val targetLanguageCode = _translationTargetLanguageCode.value.trim().lowercase()
+
+            if (sourceLanguageCode.isEmpty() || targetLanguageCode.isEmpty()) return@launch
+
+            val currentInput = confirmedSnapshot to hypothesisSnapshot
+            if (lastTranslationInput == currentInput) return@launch
+
             var warningMessage: String? = null
 
             var translatedConfirmed: String
@@ -1705,6 +1811,7 @@ class WhisperEngine(
             )
             lastSpokenTranslatedConfirmed = normalized
         } catch (e: Throwable) {
+            micStoppedForTts = false  // TTS failed; callback won't fire, so reset manually
             _lastError.value = AppError.TtsFailed(e)
         }
     }

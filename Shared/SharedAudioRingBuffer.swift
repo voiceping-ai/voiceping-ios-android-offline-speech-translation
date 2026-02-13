@@ -12,11 +12,12 @@ import Foundation
 ///   Bytes 4–7:   readOffset   (UInt32, sample index modulo capacity)
 ///   Bytes 8–11:  sampleRate   (UInt32, always 16000)
 ///   Bytes 12–15: isActive     (UInt32, 1 = broadcast active, 0 = inactive)
-///   Bytes 16..:  Float32 audio samples (capacity × 4 bytes)
+///   Bytes 16–19: requestStop  (UInt32, 1 = app requests broadcast stop)
+///   Bytes 20..:  Float32 audio samples (capacity × 4 bytes)
 ///
-/// ~30 seconds at 16kHz = 480,000 samples = 1,920,000 bytes + 16 header = ~1.88 MB
+/// ~30 seconds at 16kHz = 480,000 samples = 1,920,000 bytes + 20 header = ~1.88 MB
 final class SharedAudioRingBuffer {
-    static let headerSize = 16
+    static let headerSize = 20
     static let capacity = 480_000  // 30 seconds at 16kHz
     static let totalSize = headerSize + capacity * MemoryLayout<Float>.size
     static let fileName = "audio_ring.pcm"
@@ -74,6 +75,7 @@ final class SharedAudioRingBuffer {
             writeUInt32(at: 0, value: 0) // writeOffset
             writeUInt32(at: 4, value: 0) // readOffset
             writeUInt32(at: 8, value: 16000) // sampleRate
+            writeUInt32(at: 16, value: 0) // requestStop — clear on start
             // isActive is set separately
         }
     }
@@ -109,6 +111,15 @@ final class SharedAudioRingBuffer {
 
     func setActive(_ active: Bool) {
         writeUInt32(at: 12, value: active ? 1 : 0)
+    }
+
+    /// Set by the app (consumer) to request the extension stop the broadcast.
+    var requestStop: Bool {
+        readUInt32(at: 16) == 1
+    }
+
+    func setRequestStop(_ stop: Bool) {
+        writeUInt32(at: 16, value: stop ? 1 : 0)
     }
 
     // MARK: - Audio data pointer

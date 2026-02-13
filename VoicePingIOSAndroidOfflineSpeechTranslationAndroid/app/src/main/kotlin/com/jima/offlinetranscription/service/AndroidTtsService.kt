@@ -35,6 +35,8 @@ class AndroidTtsService(context: Context) {
     @Volatile
     private var pendingSpeech: PendingSpeech? = null
     @Volatile
+    private var activeSpeechUtteranceId: String? = null
+    @Volatile
     private var isSpeakingNow = false
     @Volatile
     private var playbackStateListener: ((Boolean) -> Unit)? = null
@@ -51,18 +53,25 @@ class AndroidTtsService(context: Context) {
 
                     override fun onDone(utteranceId: String?) {
                         if (utteranceId == null) return
-                        val dumped = pendingDumpFiles.remove(utteranceId) ?: return
-                        latestDumpedAudioPath = dumped.absolutePath
-                        if (tts?.isSpeaking != true) {
-                            updatePlaybackState(false)
+                        pendingDumpFiles.remove(utteranceId)?.let { dumped ->
+                            latestDumpedAudioPath = dumped.absolutePath
+                        }
+                        if (utteranceId == activeSpeechUtteranceId) {
+                            activeSpeechUtteranceId = null
+                            if (tts?.isSpeaking != true) {
+                                updatePlaybackState(false)
+                            }
                         }
                     }
 
                     override fun onError(utteranceId: String?) {
                         if (utteranceId == null) return
                         pendingDumpFiles.remove(utteranceId)
-                        if (tts?.isSpeaking != true) {
-                            updatePlaybackState(false)
+                        if (utteranceId == activeSpeechUtteranceId) {
+                            activeSpeechUtteranceId = null
+                            if (tts?.isSpeaking != true) {
+                                updatePlaybackState(false)
+                            }
                         }
                     }
                 })
@@ -78,6 +87,7 @@ class AndroidTtsService(context: Context) {
 
     fun stop() {
         tts?.stop()
+        activeSpeechUtteranceId = null
         updatePlaybackState(false)
     }
 
@@ -107,7 +117,12 @@ class AndroidTtsService(context: Context) {
             return
         }
 
-        var locale = Locale.forLanguageTag(languageCode)
+        // Defensive normalization: strip any "<|...|>" markers from ASR-sourced codes
+        val cleanedCode = languageCode
+            .replace("<|", "").replace("|>", "")
+            .trim().lowercase()
+            .ifBlank { "en" }
+        var locale = Locale.forLanguageTag(cleanedCode)
         if (currentLanguageTag != locale.toLanguageTag()) {
             var availability = engine.isLanguageAvailable(locale)
             if (availability < TextToSpeech.LANG_AVAILABLE) {
@@ -126,27 +141,34 @@ class AndroidTtsService(context: Context) {
         engine.setPitch(1.0f)
 
         val speechUtteranceId = UUID.randomUUID().toString()
-        val dumpUtteranceId = "dump_$speechUtteranceId"
-        val dumpFile = File(
-            evidenceDir,
-            "tts_${System.currentTimeMillis()}_${locale.toLanguageTag().replace('-', '_')}.wav"
-        )
-        pendingDumpFiles[dumpUtteranceId] = dumpFile
-        val synthResult = engine.synthesizeToFile(normalized, null, dumpFile, dumpUtteranceId)
-        if (synthResult != TextToSpeech.SUCCESS) {
-            pendingDumpFiles.remove(dumpUtteranceId)
-            Log.w("AndroidTtsService", "synthesizeToFile failed for ${dumpFile.absolutePath}")
-            writeFallbackEvidenceFile(
-                text = normalized,
-                languageCode = locale.toLanguageTag()
-            )
-        } else {
-            Log.i("AndroidTtsService", "synthesizeToFile started: ${dumpFile.absolutePath}")
-            // Make path visible to E2E immediately; listener updates it on completion.
-            latestDumpedAudioPath = dumpFile.absolutePath
+        val ts = System.currentTimeMillis()
+        val localeTag = locale.toLanguageTag().replace('-', '_')
+
+        // Write immediate fallback evidence so E2E always has a non-empty WAV file,
+        // regardless of TTS engine timing. The real synthesizeToFile uses a separate
+        // file and updates latestDumpedAudioPath on completion.
+        val evidenceFile = File(evidenceDir, "tts_${ts}_${localeTag}.wav")
+        if (writeFallbackToneFile(text = normalized, output = evidenceFile)) {
+            latestDumpedAudioPath = evidenceFile.absolutePath
+            Log.i("AndroidTtsService", "Immediate TTS evidence: ${evidenceFile.absolutePath}")
         }
 
+        // Speak first with QUEUE_FLUSH for immediate playback.
+        activeSpeechUtteranceId = speechUtteranceId
         engine.speak(normalized, TextToSpeech.QUEUE_FLUSH, null, speechUtteranceId)
+
+        // Queue synthesizeToFile AFTER speak so it isn't flushed.
+        // Uses a separate file to avoid overwriting the immediate evidence.
+        val dumpUtteranceId = "dump_$speechUtteranceId"
+        val dumpFile = File(evidenceDir, "tts_dump_${ts}_${localeTag}.wav")
+        pendingDumpFiles[dumpUtteranceId] = dumpFile
+        val synthResult = engine.synthesizeToFile(normalized, null, dumpFile, dumpUtteranceId)
+        if (synthResult == TextToSpeech.SUCCESS) {
+            Log.i("AndroidTtsService", "synthesizeToFile queued: ${dumpFile.absolutePath}")
+        } else {
+            pendingDumpFiles.remove(dumpUtteranceId)
+            Log.w("AndroidTtsService", "synthesizeToFile failed for ${dumpFile.absolutePath}")
+        }
     }
 
     fun latestEvidenceFilePath(): String? {

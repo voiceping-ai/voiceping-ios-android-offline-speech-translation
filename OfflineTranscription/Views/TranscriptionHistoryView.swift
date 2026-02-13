@@ -37,6 +37,10 @@ struct TranscriptionHistoryView: View {
         .navigationDestination(for: TranscriptionRecord.self) { record in
             TranscriptionDetailView(record: record)
         }
+        .safeAreaInset(edge: .bottom) {
+            AppVersionLabel()
+                .padding(.bottom, 4)
+        }
     }
 }
 

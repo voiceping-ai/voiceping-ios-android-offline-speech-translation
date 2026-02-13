@@ -67,6 +67,10 @@ struct RootView: View {
                             .foregroundStyle(.red)
                             .padding(.horizontal)
                     }
+
+                    Spacer()
+                    AppVersionLabel()
+                        .padding(.bottom, 8)
                 }
             }
         }

@@ -3,11 +3,13 @@ package com.voiceping.offlinetranscription.ui.transcription
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import com.voiceping.offlinetranscription.service.MediaProjectionService
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -35,6 +37,7 @@ import com.voiceping.offlinetranscription.model.ModelInfo
 import com.voiceping.offlinetranscription.model.ModelState
 import com.voiceping.offlinetranscription.model.TranslationProvider
 import com.voiceping.offlinetranscription.service.E2ETestResult
+import com.voiceping.offlinetranscription.ui.components.AppVersionLabel
 import com.voiceping.offlinetranscription.ui.components.AudioVisualizer
 import com.voiceping.offlinetranscription.ui.components.RecordButton
 import com.voiceping.offlinetranscription.util.FormatUtils
@@ -76,6 +79,10 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                 !viewModel.systemAudioCaptureReady.value
             ) {
                 projectionManager?.let { manager ->
+                    // Android 14+ requires foreground service before getMediaProjection()
+                    context.startForegroundService(
+                        Intent(context, MediaProjectionService::class.java)
+                    )
                     mediaProjectionLauncher.launch(manager.createScreenCaptureIntent())
                 } ?: run {
                     pendingPermissionStart = false
@@ -94,6 +101,10 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
             viewModel.setSystemAudioCapturePermission(Activity.RESULT_CANCELED, null)
             return
         }
+        // Android 14+ requires foreground service before getMediaProjection()
+        context.startForegroundService(
+            Intent(context, MediaProjectionService::class.java)
+        )
         mediaProjectionLauncher.launch(projectionManager.createScreenCaptureIntent())
     }
 
@@ -609,6 +620,10 @@ private fun SettingsBottomSheet(
                 Text("Enable Timestamps")
                 Switch(checked = enableTimestamps, onCheckedChange = onTimestampsChange)
             }
+
+            AppVersionLabel(
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
         }
