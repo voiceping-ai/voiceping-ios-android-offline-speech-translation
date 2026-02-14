@@ -41,6 +41,26 @@ jobs:
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleRelease bundleRelease
 
+      - name: Validate Android binaries
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=(
+            VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/debug/*.apk
+            VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/release/*.apk
+            VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/bundle/release/*.aab
+          )
+
+          mkdir -p build
+          : > build/android-binaries.sha256
+
+          for f in "${files[@]}"; do
+            [ -s "$f" ] || { echo "Missing or empty binary: $f" >&2; exit 1; }
+            unzip -t "$f" >/dev/null
+            sha256sum "$f" | tee -a build/android-binaries.sha256
+          done
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,6 +82,13 @@ jobs:
           path: VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
 
+      - name: Upload Android checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-binaries-checksums
+          path: build/android-binaries.sha256
+          if-no-files-found: error
+
       - name: Publish GitHub release assets
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
@@ -74,5 +101,6 @@ jobs:
             VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/debug/*.apk
             VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/release/*.apk
             VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/bundle/release/*.aab
+            build/android-binaries.sha256
           fail_on_unmatched_files: true
           overwrite_files: true

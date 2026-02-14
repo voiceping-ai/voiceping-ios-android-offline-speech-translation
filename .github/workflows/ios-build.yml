@@ -41,11 +41,27 @@ jobs:
           rm -f "$zip_path"
           ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
 
+      - name: Validate iOS simulator package
+        run: |
+          set -euo pipefail
+          zip_path="build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip"
+          [ -s "$zip_path" ] || { echo "Missing or empty iOS package: $zip_path" >&2; exit 1; }
+          unzip -t "$zip_path" >/dev/null
+          unzip -l "$zip_path" | rg -q "OfflineTranscription\\.app/"
+          shasum -a 256 "$zip_path" | tee build/ios-simulator.sha256
+
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-simulator-app
           path: build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip
+          if-no-files-found: error
+
+      - name: Upload iOS checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-checksum
+          path: build/ios-simulator.sha256
           if-no-files-found: error
 
       - name: Publish GitHub release assets
@@ -56,6 +72,8 @@ jobs:
           name: Build ${{ github.sha }}
           prerelease: true
           generate_release_notes: true
-          files: build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip
+          files: |
+            build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip
+            build/ios-simulator.sha256
           fail_on_unmatched_files: true
           overwrite_files: true
