@@ -12,8 +12,12 @@ import Foundation  // For NSString
 /// - Returns: A pointer that can be passed to C as `const char*`
 
 public func toCPointer(_ s: String) -> UnsafePointer<Int8>! {
-  let cs = (s as NSString).utf8String
-  return UnsafePointer<Int8>(cs)
+  // Use strdup to create a persistent copy. The original implementation
+  // returned a pointer into a temporary NSString that could be freed
+  // before the C code reads it (use-after-free). strdup allocates a
+  // heap copy that outlives the temporary. The small leak is acceptable
+  // since this is only called during config construction at model load.
+  return UnsafePointer(s.withCString { strdup($0) })
 }
 
 /// Return an instance of SherpaOnnxOnlineTransducerModelConfig.
