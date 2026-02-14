@@ -85,6 +85,21 @@ class MlKitTranslator {
         }
     }
 
+    /**
+     * Proactively download the translation model for the given language pair.
+     * Call this when translation is enabled or language changes to avoid delay on first translate().
+     */
+    suspend fun prepareModel(sourceLanguageCode: String, targetLanguageCode: String) {
+        val srcLang = toMlKitLanguage(sourceLanguageCode) ?: return
+        val tgtLang = toMlKitLanguage(targetLanguageCode) ?: return
+        if (srcLang == tgtLang) return
+        try {
+            ensureTranslator(srcLang, tgtLang)
+        } catch (e: Exception) {
+            Log.e(TAG, "prepareModel failed: $sourceLanguageCode -> $targetLanguageCode", e)
+        }
+    }
+
     fun close() {
         translator?.close()
         translator = null
@@ -109,7 +124,8 @@ class MlKitTranslator {
         currentSourceLang = null
         currentTargetLang = null
         _modelReady.value = false
-        _downloadStatus.value = "Downloading translation model..."
+        _downloadStatus.value = "Downloading translation model ($sourceLang → $targetLang)..."
+        Log.e(TAG, "ensureTranslator: starting download $sourceLang -> $targetLang")
 
         val options = TranslatorOptions.Builder()
             .setSourceLanguage(sourceLang)
@@ -130,7 +146,7 @@ class MlKitTranslator {
                     currentTargetLang = targetLang
                     _modelReady.value = true
                     _downloadStatus.value = null
-                    Log.i(TAG, "Translation model ready: $sourceLang -> $targetLang")
+                    Log.e(TAG, "Translation model ready: $sourceLang -> $targetLang")
                     if (continuation.isActive) {
                         continuation.resume(Unit)
                     }

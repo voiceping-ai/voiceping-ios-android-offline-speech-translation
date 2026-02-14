@@ -152,6 +152,8 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
     val translatedConfirmedText by viewModel.translatedConfirmedText.collectAsState()
     val translatedHypothesisText by viewModel.translatedHypothesisText.collectAsState()
     val translationWarning by viewModel.translationWarning.collectAsState()
+    val translationModelReady by viewModel.translationModelReady.collectAsState()
+    val translationDownloadStatus by viewModel.translationDownloadStatus.collectAsState()
     val displayConfirmedText = remember(confirmedText) { confirmedText.trim() }
     val displayHypothesisText = remember(hypothesisText) { hypothesisText.trim() }
     val displayTranslatedConfirmedText = remember(translatedConfirmedText) { translatedConfirmedText.trim() }
@@ -355,6 +357,8 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                     ttsRate = ttsRate,
                     translationProvider = translationProviderState,
                     isAndroidSystemTranslationAvailable = viewModel.isAndroidSystemTranslationAvailable,
+                    translationModelReady = translationModelReady,
+                    translationDownloadStatus = translationDownloadStatus,
                     translatedConfirmedText = displayTranslatedConfirmedText,
                     translatedHypothesisText = displayTranslatedHypothesisText,
                     translationWarning = displayTranslationWarning,
@@ -703,6 +707,8 @@ private fun HomeLanguageSpeechCard(
     ttsRate: Float,
     translationProvider: TranslationProvider,
     isAndroidSystemTranslationAvailable: Boolean,
+    translationModelReady: Boolean,
+    translationDownloadStatus: String?,
     translatedConfirmedText: String,
     translatedHypothesisText: String,
     translationWarning: String,
@@ -814,6 +820,48 @@ private fun HomeLanguageSpeechCard(
                     selectedCode = translationTargetLanguageCode,
                     enabled = translationEnabled,
                     onLanguageSelected = onTargetLanguageChange
+                )
+            }
+        }
+
+        // Translation model download status
+        if (translationEnabled) {
+            val statusText = translationDownloadStatus
+            if (!translationModelReady && statusText != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (statusText.startsWith("Downloading") || statusText.startsWith("Preparing")) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (statusText.contains("failed", ignoreCase = true))
+                            MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else if (!translationModelReady) {
+                Text(
+                    text = "Preparing translation model...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            } else {
+                Text(
+                    text = "Translation model ready",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
         }

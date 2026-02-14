@@ -102,15 +102,18 @@ class StreamingChunkManager(
 
         // Some offline engines (e.g., SenseVoice via sherpa-onnx) often return
         // a single growing text segment without usable timestamps (0/0).
-        // In that mode, the prefix-matching confirmer can stall and appear delayed.
-        // Treat this as live committed chunk text so UI updates immediately.
+        // Treat this as hypothesis (matching iOS behavior) so that:
+        // 1. Text shows as live hypothesis in the UI
+        // 2. It only becomes confirmed text when the chunk boundary is crossed
+        //    via finalizeCurrentChunk() — this ensures TTS only speaks after
+        //    a full chunk (e.g. 5 seconds), creating proper interpretation rhythm.
         if (adjustedSegments.size == 1 &&
             adjustedSegments[0].startMs == 0L &&
             adjustedSegments[0].endMs == 0L
         ) {
             prevUnconfirmedSegments = adjustedSegments
-            confirmedText = joinChunkTexts(completedChunksText, renderSegmentsText(adjustedSegments))
-            hypothesisText = ""
+            confirmedText = completedChunksText
+            hypothesisText = renderSegmentsText(adjustedSegments)
             return
         }
 

@@ -685,6 +685,22 @@ final class WhisperService {
         consecutiveSilenceCount = 0
         hasCompletedFirstInference = false
 
+        // Clear transcription + translation text for fresh interpretation segment.
+        // Each TTS cycle starts with a clean slate so the user sees only the
+        // current segment, not accumulated history.
+        completedChunksText = ""
+        confirmedSegments = []
+        unconfirmedSegments = []
+        prevUnconfirmedSegments = []
+        lastConfirmedSegmentEndSeconds = 0
+        confirmedText = ""
+        hypothesisText = ""
+        translatedConfirmedText = ""
+        translatedHypothesisText = ""
+        lastTranslationInput = nil
+        lastSpokenTranslatedConfirmed = ""
+        NSLog("[WhisperService] Cleared text state for fresh interpretation segment")
+
         do {
             if audioCaptureMode == .systemBroadcast {
                 let source = SystemAudioSource()

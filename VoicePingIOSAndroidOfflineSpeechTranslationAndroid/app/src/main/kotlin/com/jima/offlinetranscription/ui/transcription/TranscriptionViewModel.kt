@@ -49,6 +49,8 @@ class TranscriptionViewModel(
     val translatedHypothesisText = engine.translatedHypothesisText
     val translationWarning = engine.translationWarning
     val translationProvider = engine.translationProvider
+    val translationModelReady = engine.translationModelReady
+    val translationDownloadStatus = engine.translationDownloadStatus
     val isAndroidSystemTranslationAvailable = engine.isAndroidSystemTranslationAvailable
     val cpuPercent = engine.cpuPercent
     val memoryMB = engine.memoryMB

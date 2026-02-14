@@ -267,15 +267,19 @@ class WhisperEngine(
     init {
         ttsService.setPlaybackStateListener { speaking ->
             scope.launch {
-                Log.i("WhisperEngine", "TTS playback state changed: speaking=$speaking, micStoppedForTts=$micStoppedForTts, session=${_sessionState.value}")
+                Log.e("InterpLoop", "TTS callback: speaking=$speaking micStoppedForTts=$micStoppedForTts session=${_sessionState.value} isRecording=${audioRecorder.isRecording}")
                 if (speaking) {
                     if (audioRecorder.isRecording) {
                         ttsMicGuardViolations += 1
                         micStoppedForTts = true
                         stopRecordingAndWait()
+                        Log.e("InterpLoop", "TTS callback: stopped mic for TTS guard")
                     }
                 } else if (micStoppedForTts) {
+                    Log.e("InterpLoop", "TTS callback: TTS done, calling resumeRecordingAfterTts")
                     resumeRecordingAfterTts()
+                } else {
+                    Log.e("InterpLoop", "TTS callback: TTS done but micStoppedForTts=false, no resume")
                 }
             }
         }
@@ -546,6 +550,7 @@ class WhisperEngine(
         if (!enabled) {
             resetTranslationState(stopTts = true)
         } else {
+            prepareTranslationModel()
             scheduleTranslationUpdate()
         }
     }
@@ -566,6 +571,7 @@ class WhisperEngine(
         lastTranslationInput = null
         lastSpokenTranslatedConfirmed = ""  // Clear TTS cache — language changed
         ttsService.stop()
+        prepareTranslationModel()
         scheduleTranslationUpdate()
     }
 
@@ -576,6 +582,7 @@ class WhisperEngine(
         lastTranslationInput = null
         lastSpokenTranslatedConfirmed = ""  // Clear TTS cache — language changed
         ttsService.stop()
+        prepareTranslationModel()
         scheduleTranslationUpdate()
     }
 
@@ -590,7 +597,23 @@ class WhisperEngine(
         preferences.setTranslationProvider(provider.name)
         lastTranslationInput = null
         resetTranslationState(stopTts = true)
+        prepareTranslationModel()
         scheduleTranslationUpdate()
+    }
+
+    /**
+     * Proactively download the translation model for the current language pair.
+     * Called when translation is enabled, language changes, or provider changes.
+     */
+    private suspend fun prepareTranslationModel() {
+        if (!_translationEnabled.value) return
+        val src = _translationSourceLanguageCode.value
+        val tgt = _translationTargetLanguageCode.value
+        if (src.isBlank() || tgt.isBlank() || src == tgt) return
+        when (_translationProvider.value) {
+            TranslationProvider.ML_KIT -> mlKitTranslator.prepareModel(src, tgt)
+            TranslationProvider.ANDROID_SYSTEM -> { /* system translator has no pre-download */ }
+        }
     }
 
     suspend fun prewarmRecordingPath() {
@@ -632,6 +655,7 @@ class WhisperEngine(
         )
         prewarmRecordingPath()
         prewarmInferencePath()
+        prepareTranslationModel()
     }
 
     fun startRecording() {
@@ -815,17 +839,23 @@ class WhisperEngine(
 
     /** Resume recording immediately after TTS finishes, without resetting transcription state. */
     private suspend fun resumeRecordingAfterTts() {
-        if (!micStoppedForTts) return
+        if (!micStoppedForTts) {
+            Log.e("InterpLoop", "resumeRecordingAfterTts: micStoppedForTts=false, returning")
+            return
+        }
         micStoppedForTts = false
 
         if (_sessionState.value != SessionState.Idle) {
-            Log.i("WhisperEngine", "Skipping TTS resume — session not idle (state=${_sessionState.value})")
+            Log.e("InterpLoop", "resumeRecordingAfterTts: session not idle (${_sessionState.value}), skipping")
             return
         }
         val engine = currentEngine
-        if (engine == null || !engine.isLoaded) return
+        if (engine == null || !engine.isLoaded) {
+            Log.e("InterpLoop", "resumeRecordingAfterTts: no engine or not loaded, skipping")
+            return
+        }
 
-        Log.i("WhisperEngine", "Resuming recording after TTS playback — draining old jobs first")
+        Log.e("InterpLoop", "resumeRecordingAfterTts: draining old jobs, then restarting recording")
 
         // Wait for any lingering jobs to fully complete to avoid concurrent inference
         cancelTranscriptionJobAndWait()
@@ -841,9 +871,19 @@ class WhisperEngine(
         lastBufferSize = 0
         hasCompletedFirstInference = false
         realtimeInferenceCount = 0
-        // Preserve lastTranslationInput and lastSpokenTranslatedConfirmed so TTS
-        // delta computation only speaks NEW text after resume (matches iOS behavior).
-        // Language swaps already clear these via resetTranslationState().
+
+        // Clear transcription + translation text for fresh interpretation segment.
+        // In interpretation mode, each TTS cycle should start with a clean slate
+        // so the user sees only the current segment, not accumulated history.
+        chunkManager.reset()
+        audioRecorder.reset()
+        _confirmedText.value = ""
+        _hypothesisText.value = ""
+        _translatedConfirmedText.value = ""
+        _translatedHypothesisText.value = ""
+        lastTranslationInput = null
+        lastSpokenTranslatedConfirmed = ""
+        Log.e("InterpLoop", "resumeRecordingAfterTts: cleared text state for fresh segment")
 
         // Ensure foreground service is running for system audio capture
         if (_audioInputMode.value == AudioInputMode.SYSTEM_PLAYBACK) {
@@ -1682,16 +1722,21 @@ class WhisperEngine(
     }
 
     private suspend fun enforceMicStoppedForTts(): Boolean {
+        Log.e("InterpLoop", "enforceMicStoppedForTts: isRecording=${audioRecorder.isRecording} session=${_sessionState.value}")
         if (audioRecorder.isRecording) {
             micStoppedForTts = true
             stopRecordingAndWait()
+            Log.e("InterpLoop", "enforceMicStoppedForTts: after stopRecordingAndWait, isRecording=${audioRecorder.isRecording}")
         }
         if (audioRecorder.isRecording) {
             ttsMicGuardViolations += 1
+            Log.e("InterpLoop", "enforceMicStoppedForTts: force-stop fallback, violations=$ttsMicGuardViolations")
             transitionTo(SessionState.Idle)
             audioRecorder.stopRecording()
         }
-        return !audioRecorder.isRecording
+        val result = !audioRecorder.isRecording
+        Log.e("InterpLoop", "enforceMicStoppedForTts: returning $result")
+        return result
     }
 
     private fun scheduleTranslationUpdate() {
@@ -1712,6 +1757,8 @@ class WhisperEngine(
         val tgtCheck = _translationTargetLanguageCode.value.trim()
         if (srcCheck.isEmpty() || tgtCheck.isEmpty()) return
 
+        Log.e("InterpLoop", "scheduleTranslationUpdate: $srcCheck→$tgtCheck micStopped=$micStoppedForTts speakTTS=${_speakTranslatedAudio.value}")
+
         translationJob = scope.launch(Dispatchers.Default) {
             // Debounce: coalesce rapid updates (e.g. during fast speech)
             // so we don't cancel in-flight translations repeatedly.
@@ -1726,7 +1773,12 @@ class WhisperEngine(
             if (sourceLanguageCode.isEmpty() || targetLanguageCode.isEmpty()) return@launch
 
             val currentInput = confirmedSnapshot to hypothesisSnapshot
-            if (lastTranslationInput == currentInput) return@launch
+            if (lastTranslationInput == currentInput) {
+                Log.e("InterpLoop", "scheduleTranslationUpdate: text unchanged, skipping")
+                return@launch
+            }
+
+            Log.e("InterpLoop", "translating: confirmed='${confirmedSnapshot.take(40)}' hyp='${hypothesisSnapshot.take(40)}' $sourceLanguageCode→$targetLanguageCode")
 
             var warningMessage: String? = null
 
@@ -1749,15 +1801,18 @@ class WhisperEngine(
                     } else {
                         translateWithProvider(hypothesisSnapshot, sourceLanguageCode, targetLanguageCode)
                     }
+                    Log.e("InterpLoop", "translated: confirmed='${translatedConfirmed.take(40)}' hyp='${translatedHypothesis.take(40)}'")
                 } catch (e: UnsupportedOperationException) {
                     translatedConfirmed = confirmedSnapshot
                     translatedHypothesis = hypothesisSnapshot
                     warningMessage = e.message ?: AppError.TranslationUnavailable().message
+                    Log.e("InterpLoop", "translation unsupported: ${e.message}")
                 } catch (e: Throwable) {
                     if (e is CancellationException) return@launch
                     translatedConfirmed = confirmedSnapshot
                     translatedHypothesis = hypothesisSnapshot
                     warningMessage = AppError.TranslationFailed(e).message
+                    Log.e("InterpLoop", "translation failed: ${e.message}")
                 }
             }
 
@@ -1767,7 +1822,10 @@ class WhisperEngine(
             lastTranslationInput = currentInput
 
             if (_speakTranslatedAudio.value) {
+                Log.e("InterpLoop", "calling speakTranslatedDeltaIfNeeded, translatedConfirmed='${_translatedConfirmedText.value.take(40)}'")
                 speakTranslatedDeltaIfNeeded(_translatedConfirmedText.value, targetLanguageCode)
+            } else {
+                Log.e("InterpLoop", "speakTranslatedAudio is OFF, skipping TTS")
             }
         }
     }
@@ -1786,7 +1844,10 @@ class WhisperEngine(
 
     private suspend fun speakTranslatedDeltaIfNeeded(translatedConfirmed: String, languageCode: String) {
         val normalized = normalizeDisplayText(translatedConfirmed)
-        if (normalized.isBlank()) return
+        if (normalized.isBlank()) {
+            Log.e("InterpLoop", "speakDelta: normalized is blank, skipping")
+            return
+        }
 
         var delta = normalized
         if (lastSpokenTranslatedConfirmed.isNotBlank() &&
@@ -1797,15 +1858,31 @@ class WhisperEngine(
             )
         }
 
-        if (delta.isBlank()) return
+        if (delta.isBlank()) {
+            Log.e("InterpLoop", "speakDelta: delta is blank (already spoken), skipping")
+            return
+        }
+
+        // Skip TTS for very short text (punctuation-only, single chars) to avoid
+        // useless tiny utterances that interrupt the interpretation flow.
+        val meaningfulChars = delta.count { it.isLetterOrDigit() }
+        if (meaningfulChars < 2) {
+            Log.e("InterpLoop", "speakDelta: delta too short (meaningfulChars=$meaningfulChars), skipping: '$delta'")
+            return
+        }
+
+        Log.e("InterpLoop", "speakDelta: delta='${delta.take(40)}' lang=$languageCode, calling enforceMicStoppedForTts")
 
         if (!enforceMicStoppedForTts()) {
+            Log.e("InterpLoop", "speakDelta: enforceMicStoppedForTts FAILED, mic still active")
             applyTranslationWarning(
                 "Microphone is still active; skipped TTS playback to avoid feedback loop.",
                 stopTts = true
             )
             return
         }
+
+        Log.e("InterpLoop", "speakDelta: mic stopped OK, calling ttsService.speak()")
 
         try {
             ttsStartCount += 1
@@ -1815,7 +1892,9 @@ class WhisperEngine(
                 rate = _ttsRate.value
             )
             lastSpokenTranslatedConfirmed = normalized
+            Log.e("InterpLoop", "speakDelta: ttsService.speak() called, ttsStartCount=$ttsStartCount")
         } catch (e: Throwable) {
+            Log.e("InterpLoop", "speakDelta: TTS failed: ${e.message}")
             micStoppedForTts = false  // TTS failed; callback won't fire, so reset manually
             _lastError.value = AppError.TtsFailed(e)
         }
