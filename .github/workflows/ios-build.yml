@@ -47,7 +47,7 @@ jobs:
           zip_path="build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip"
           [ -s "$zip_path" ] || { echo "Missing or empty iOS package: $zip_path" >&2; exit 1; }
           unzip -t "$zip_path" >/dev/null
-          unzip -l "$zip_path" | rg -q "OfflineTranscription\\.app/"
+          unzip -l "$zip_path" | grep -q "OfflineTranscription\\.app/"
           shasum -a 256 "$zip_path" | tee build/ios-simulator.sha256
 
       - name: Upload app artifact
