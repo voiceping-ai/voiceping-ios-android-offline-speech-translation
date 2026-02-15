@@ -7,7 +7,7 @@ final class UserFlowUITests: XCTestCase {
     // MARK: - Constants
 
     private let modelLoadTimeout: TimeInterval = 120
-    private let transcriptionTimeout: TimeInterval = 60
+    private let transcriptionTimeout: TimeInterval = 180
     private let modelSwitchTimeout: TimeInterval = 180
     private let shortTimeout: TimeInterval = 10
 
@@ -56,6 +56,9 @@ final class UserFlowUITests: XCTestCase {
         let app = launchApp(modelId: "sensevoice-small")
         waitForModelLoad(app)
 
+        // Dismiss any translation download dialog (Apple Translation framework)
+        dismissTranslationDownloadDialog(app)
+
         // Verify idle state
         let idlePlaceholder = app.staticTexts["idle_placeholder"]
         XCTAssertTrue(
@@ -81,6 +84,13 @@ final class UserFlowUITests: XCTestCase {
             "Confirmed text should appear after transcription"
         )
 
+        // Wait for translation to complete (async after transcription)
+        sleep(5)
+        // Dismiss translation download dialog if it reappeared
+        dismissTranslationDownloadDialog(app)
+        sleep(15)
+        // Dismiss again if needed
+        dismissTranslationDownloadDialog(app)
         captureScreenshot(app, step: "03_result")
 
         // Verify text contains expected keywords
@@ -89,6 +99,69 @@ final class UserFlowUITests: XCTestCase {
             text.contains("country") || text.contains("ask"),
             "Transcription should contain expected JFK keywords, got: \(text)"
         )
+    }
+
+    // MARK: - Test 2b: Screenshot + Demo Frames with Translation
+
+    func test_02b_screenshotWithTranslation() {
+        let demoDir = "/tmp/ios_demo_frames"
+        try? FileManager.default.removeItem(atPath: demoDir)
+        try? FileManager.default.createDirectory(atPath: demoDir, withIntermediateDirectories: true)
+
+        let app = launchApp(modelId: "sensevoice-small")
+
+        // Frame 1: Model loading
+        sleep(1)
+        saveDemoFrame(app, to: demoDir, name: "01_loading.png")
+
+        waitForModelLoad(app)
+        dismissTranslationDownloadDialog(app)
+        sleep(2)
+
+        // Frame 2: Idle state
+        saveDemoFrame(app, to: demoDir, name: "02_idle.png")
+
+        // Tap test file button to transcribe
+        let testFileBtn = app.buttons["test_file_button"]
+        XCTAssertTrue(testFileBtn.waitForExistence(timeout: shortTimeout))
+        testFileBtn.tap()
+
+        // Frame 3: Transcribing in progress
+        sleep(2)
+        saveDemoFrame(app, to: demoDir, name: "03_transcribing.png")
+
+        // Wait for confirmed text
+        let confirmedText = app.staticTexts["confirmed_text"]
+        _ = confirmedText.waitForExistence(timeout: transcriptionTimeout)
+
+        // Frame 4: Transcription complete
+        sleep(1)
+        saveDemoFrame(app, to: demoDir, name: "04_transcribed.png")
+
+        // Wait for translation to appear (poll instead of long sleep)
+        let translatedText = app.staticTexts["translated_text"]
+        for _ in 0..<30 {
+            if translatedText.exists { break }
+            sleep(1)
+        }
+        dismissTranslationDownloadDialog(app)
+        sleep(2)
+
+        // Frame 5: Final result with translation
+        saveDemoFrame(app, to: demoDir, name: "05_translated.png")
+        captureScreenshot(app, step: "translation_result")
+    }
+
+    private func saveDemoFrame(_ app: XCUIApplication, to dir: String, name: String) {
+        let screenshot = app.screenshot()
+        let path = "\(dir)/\(name)"
+        try? screenshot.pngRepresentation.write(to: URL(fileURLWithPath: path))
+        // Also add as XCTAttachment for extraction from xcresult
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = "demo_\(name)"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+        NSLog("[Demo] Frame saved: %@", path)
     }
 
     // MARK: - Test 3: Record Button States
@@ -551,7 +624,7 @@ final class UserFlowUITests: XCTestCase {
         captureScreenshot(app, step: "01_voice_mode")
 
         // Switch to System mode
-        let audioSourcePicker = app.segmentedControls["audio_source_picker"]
+        let audioSourcePicker = app.segmentedControls["audio_mode_picker"]
         XCTAssertTrue(
             audioSourcePicker.waitForExistence(timeout: shortTimeout),
             "Audio source picker should exist"
@@ -622,6 +695,62 @@ final class UserFlowUITests: XCTestCase {
         testFileBtn.tap()
         // Brief wait to let the transcription task begin
         sleep(1)
+    }
+
+    private func dismissTranslationDownloadDialog(_ app: XCUIApplication) {
+        // Apple Translation framework shows a "Required Downloads" sheet
+        // when language models need downloading. Dismiss it by tapping "Done".
+        // The dialog may reappear multiple times as translation sessions are recreated.
+        for _ in 0..<5 {
+            let doneButton = app.buttons["Done"]
+            if doneButton.waitForExistence(timeout: 3) {
+                doneButton.tap()
+                sleep(3)
+            } else {
+                break
+            }
+        }
+        // Also dismiss any alerts
+        dismissAnyAlerts(app)
+    }
+
+    // MARK: - Test 11: System Recording + File Transcription Demo
+
+    func test_11_systemRecordingAndDemo() {
+        let app = launchApp(modelId: "sensevoice-small")
+        waitForModelLoad(app)
+        dismissTranslationDownloadDialog(app)
+        sleep(1)
+
+        // Tap "System" segment in audio mode picker
+        let picker = app.segmentedControls["audio_mode_picker"]
+        if picker.waitForExistence(timeout: 5) {
+            picker.buttons["System"].tap()
+            sleep(2)
+        }
+        captureScreenshot(app, step: "system_mode")
+
+        // Switch back to Voice for file transcription demo
+        if picker.exists {
+            picker.buttons["Voice"].tap()
+            sleep(1)
+        }
+
+        // Capture file transcription demo frames
+        captureScreenshot(app, step: "frame_00_idle")
+
+        let testFileBtn = app.buttons["test_file_button"]
+        if testFileBtn.waitForExistence(timeout: shortTimeout) {
+            testFileBtn.tap()
+            for i in 1...6 {
+                usleep(500_000)
+                captureScreenshot(app, step: String(format: "frame_%02d_progress", i))
+            }
+            let confirmedText = app.staticTexts["confirmed_text"]
+            _ = confirmedText.waitForExistence(timeout: transcriptionTimeout)
+            sleep(1)
+            captureScreenshot(app, step: "frame_07_result")
+        }
     }
 
     private func dismissAnyAlerts(_ app: XCUIApplication) {

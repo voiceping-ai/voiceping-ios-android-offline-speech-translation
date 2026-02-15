@@ -111,6 +111,8 @@ GoogleService-Info.plist
 # === Test Evidence / Artifacts ===
 artifacts/
 screenshots/
+!docs/screenshots/
+!docs/screenshots/**
 tmp/
 
 # === Python cache ===

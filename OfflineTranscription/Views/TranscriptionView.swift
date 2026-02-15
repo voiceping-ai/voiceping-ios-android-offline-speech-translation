@@ -59,6 +59,7 @@ struct TranscriptionView: View {
                                     Text(translatedConfirmedText)
                                         .font(.body)
                                         .foregroundStyle(.blue)
+                                        .accessibilityIdentifier("translated_text")
                                 }
 
                                 if !translatedHypothesisText.isEmpty {
@@ -764,6 +765,8 @@ struct SimulatorTranslationBridgeFallbackView: View {
 struct TranslationBridgeView: View {
     let whisperService: WhisperService
     @State private var config: TranslationSession.Configuration?
+    @State private var currentSrc: String = ""
+    @State private var currentTgt: String = ""
 
     var body: some View {
         Color.clear
@@ -834,7 +837,11 @@ struct TranslationBridgeView: View {
 
     private func updateConfig() {
         guard whisperService.translationEnabled else {
-            config = nil
+            if config != nil {
+                config = nil
+                currentSrc = ""
+                currentTgt = ""
+            }
             return
         }
         let src = whisperService.translationSourceLanguageCode
@@ -842,10 +849,18 @@ struct TranslationBridgeView: View {
         let tgt = whisperService.translationTargetLanguageCode
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !src.isEmpty, !tgt.isEmpty, src != tgt else {
-            config = nil
+            if config != nil {
+                config = nil
+                currentSrc = ""
+                currentTgt = ""
+            }
             return
         }
+        // Skip if language pair hasn't changed to avoid cancelling the active session
+        guard src != currentSrc || tgt != currentTgt else { return }
         NSLog("[TranslationBridge] updateConfig: %@→%@", src, tgt)
+        currentSrc = src
+        currentTgt = tgt
         config = TranslationSession.Configuration(
             source: Locale.Language(identifier: src),
             target: Locale.Language(identifier: tgt)
