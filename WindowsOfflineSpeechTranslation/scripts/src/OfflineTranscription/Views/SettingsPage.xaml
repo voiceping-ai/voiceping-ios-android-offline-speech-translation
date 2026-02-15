@@ -1,0 +1,103 @@
+<Page
+    x:Class="OfflineSpeechTranslation.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer Padding="24">
+        <StackPanel MaxWidth="600" Spacing="16">
+
+            <!-- Actions -->
+            <TextBlock Text="Actions" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Copy Text" Click="CopyText_Click">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Modifiers="Control" Key="C" />
+                    </Button.KeyboardAccelerators>
+                </Button>
+                <Button Content="Clear" Click="ClearText_Click" />
+                <Button Content="Save Screenshot" Click="SaveScreenshot_Click" />
+            </StackPanel>
+
+            <Border Height="1" Margin="0,8" Background="#33000000" />
+
+            <!-- Current Model -->
+            <TextBlock Text="Current Model" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock x:Name="CurrentModelText" Opacity="0.7" />
+
+            <!-- Available Models -->
+            <TextBlock Text="Available Models" Style="{StaticResource SubtitleTextBlockStyle}"
+                       Margin="0,16,0,0" />
+
+            <ListView x:Name="ModelListView"
+                      SelectionMode="None"
+                      ItemClick="ModelItem_Click"
+                      IsItemClickEnabled="True">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Padding="8" ColumnDefinitions="*,Auto">
+                            <StackPanel>
+                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding Description}" FontSize="12" Opacity="0.7"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                    <TextBlock Text="{Binding SizeOnDisk}" FontSize="11" Opacity="0.5" />
+                                    <TextBlock Text="{Binding Languages}" FontSize="11" Opacity="0.5" />
+                                    <TextBlock Text="{Binding InferenceMethod}" FontSize="11" Opacity="0.5" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" x:Name="StatusBadge"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" Opacity="0.6" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Border Height="1" Margin="0,8" Background="#33000000" />
+
+            <!-- Toggles -->
+            <TextBlock Text="Options" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <ComboBox x:Name="CaptureSourceCombo"
+                      Header="Capture Source"
+                      SelectionChanged="CaptureSourceCombo_SelectionChanged">
+                <ComboBoxItem Content="Microphone" Tag="Microphone" />
+                <ComboBoxItem Content="System Audio (Loopback)" Tag="SystemLoopback" />
+            </ComboBox>
+            <ToggleSwitch x:Name="VadToggle" Header="Voice Activity Detection"
+                          IsOn="{x:Bind Prefs.UseVAD, Mode=TwoWay}"
+                          Toggled="VadToggle_Toggled" />
+            <ToggleSwitch x:Name="TimestampsToggle" Header="Show Timestamps"
+                          IsOn="{x:Bind Prefs.ShowTimestamps, Mode=TwoWay}"
+                          Toggled="TimestampsToggle_Toggled" />
+
+            <Border Height="1" Margin="0,8" Background="#33000000" />
+
+            <!-- Diagnostics / Evidence -->
+            <TextBlock Text="Diagnostics" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <ToggleSwitch x:Name="EvidenceModeToggle"
+                          Header="Evidence Mode (logs actions + captures screenshots for bug reports)"
+                          Toggled="EvidenceModeToggle_Toggled" />
+
+            <ToggleSwitch x:Name="EvidenceIncludeTextToggle"
+                          Header="Include transcript text in evidence"
+                          Toggled="EvidenceIncludeTextToggle_Toggled" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Start Evidence Session" Click="StartEvidenceSession_Click" />
+                <Button Content="Capture Evidence Screenshot" Click="CaptureEvidenceScreenshot_Click" />
+            </StackPanel>
+
+            <Button Content="Export Evidence ZIP" Click="ExportEvidenceZip_Click" />
+            <TextBlock x:Name="EvidenceStatusText" Opacity="0.7" TextWrapping="Wrap" />
+
+            <!-- About -->
+            <TextBlock Text="About" Style="{StaticResource SubtitleTextBlockStyle}"
+                       Margin="0,16,0,0" />
+            <TextBlock FontSize="12" Opacity="0.5">
+                Offline Transcription for Windows v1.0
+                <LineBreak />
+                Engines: whisper.cpp, sherpa-onnx (DirectML)
+            </TextBlock>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

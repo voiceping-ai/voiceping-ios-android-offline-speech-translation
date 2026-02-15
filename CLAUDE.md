@@ -12,6 +12,7 @@
 Disk space is severely limited. Simulator/emulator images consume 15-35+ GB. All target devices are available as physical hardware.
 
 ### Physical Devices
-- **iPhone 16 Pro Max**: `xcrun devicectl device install app --device DE309C97-CE22-5F5E-91AB-8374A6743161 <app_path>`
-- **iPad 9th gen (A13)**: CoreDevice `DF651D99-9E11-5BAA-A225-18DB161230CB`
-- **iPad Pro 3rd gen (A12X)**: CoreDevice `DFE60F23-ACC0-509E-AD89-FB7D770B42BF`
+- **iPad Pro 3rd gen (A12X)**: CoreDevice `DFE60F23-ACC0-509E-AD89-FB7D770B42BF`, UDID `00008027-000A50D92EEB002E`
+  - `xcrun devicectl device install app --device DFE60F23-ACC0-509E-AD89-FB7D770B42BF <app_path>`
+  - xcodebuild destination: `platform=iOS,id=00008027-000A50D92EEB002E`
+- **Samsung Galaxy** (Android): connected via USB for `adb install`

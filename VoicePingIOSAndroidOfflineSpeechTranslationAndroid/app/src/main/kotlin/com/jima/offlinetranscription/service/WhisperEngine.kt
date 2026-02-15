@@ -244,7 +244,13 @@ class WhisperEngine(
     }
 
     val fullTranscriptionText: String
-        get() = chunkManager.fullTranscriptionText()
+        get() {
+            val parts = listOfNotNull(
+                _confirmedText.value.takeIf { it.isNotBlank() },
+                _hypothesisText.value.takeIf { it.isNotBlank() }
+            )
+            return TextNormalizationUtils.normalizeText(parts.joinToString(" "))
+        }
 
     val recordingDurationSeconds: Double
         get() = audioRecorder.bufferSeconds
@@ -750,7 +756,10 @@ class WhisperEngine(
         if (engine != null && engine.isSelfRecording) {
             finalizeSelfRecordingStop(engine)
         } else {
-            finalizeBufferedRecordingStop()
+            // Stop mic input. Don't call finalizeCurrentChunk() here — the
+            // realtimeLoop finally block handles finalization on the coroutine
+            // thread to avoid racing with the loop's last iteration.
+            audioRecorder.stopRecording()
         }
 
         cancelRecorderAndEnergyJobs()
@@ -885,10 +894,6 @@ class WhisperEngine(
 
     private fun finalizeSelfRecordingStop(engine: AsrEngine) {
         transcriptionCoordinator.finalizeSelfRecordingStop(engine)
-    }
-
-    private fun finalizeBufferedRecordingStop() {
-        transcriptionCoordinator.finalizeBufferedRecordingStop()
     }
 
     private fun cancelRecorderAndEnergyJobs() {
@@ -1117,7 +1122,13 @@ class WhisperEngine(
                 _lastError.value = AppError.TranscriptionFailed(e)
                 e2eOrchestrator.writeResult(transcript = "", durationMs = 0.0, error = e.message)
             } finally {
-                transitionTo(SessionState.Idle)
+                // Only transition to Idle if we're still in the file-transcription session.
+                // stopRecording/clearTranscription may have already transitioned us, and
+                // a new recording may have started — don't clobber it.
+                val state = _sessionState.value
+                if (state == SessionState.Recording || state == SessionState.Stopping) {
+                    transitionTo(SessionState.Idle)
+                }
             }
         }
     }

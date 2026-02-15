@@ -102,11 +102,14 @@ class TranscriptionCoordinator(
             }
         } finally {
             // Final transcription pass for any remaining buffered audio.
+            // stopRecording() no longer calls finalizeCurrentChunk() — all
+            // chunkManager mutations happen here on the coroutine thread to
+            // avoid racing with the loop's last iteration.
             if (asrEngine.isLoaded) {
-                val currentCount = engine.audioRecorder.sampleCount
-                if (currentCount > lastBufferSize) {
-                    try {
-                        withContext(NonCancellable) {
+                try {
+                    withContext(NonCancellable) {
+                        val currentCount = engine.audioRecorder.sampleCount
+                        if (currentCount > lastBufferSize) {
                             val slice = engine.chunkManager.computeSlice(currentCount)
                             if (slice != null) {
                                 val audioSamples = engine.audioRecorder.samplesRange(slice.startSample, slice.endSample)
@@ -114,8 +117,6 @@ class TranscriptionCoordinator(
                                     val segments = asrEngine.transcribe(audioSamples, computeInferenceThreads(), "auto")
                                     if (segments.isNotEmpty()) {
                                         engine.chunkManager.finalizeTrailing(segments, slice.sliceOffsetMs)
-                                        engine.updateConfirmedText(engine.chunkManager.confirmedText)
-                                        engine.updateHypothesisText("")
                                         val lang = WhisperEngine.normalizeLanguageCode(segments.firstOrNull()?.detectedLanguage)
                                         if (lang != null) engine.updateDetectedLanguage(lang)
                                         Log.i("TranscriptionCoordinator", "realtimeLoop final pass: ${segments.size} segments, text='${engine.chunkManager.confirmedText.takeLast(60)}'")
@@ -123,9 +124,13 @@ class TranscriptionCoordinator(
                                 }
                             }
                         }
-                    } catch (e: Throwable) {
-                        Log.w("TranscriptionCoordinator", "realtimeLoop final pass failed", e)
+                        // Commit any remaining hypothesis text as confirmed.
+                        engine.chunkManager.finalizeCurrentChunk()
+                        engine.updateConfirmedText(engine.chunkManager.confirmedText)
+                        engine.updateHypothesisText("")
                     }
+                } catch (e: Throwable) {
+                    Log.w("TranscriptionCoordinator", "realtimeLoop final pass failed", e)
                 }
             }
             transcriptionJob = null
@@ -418,14 +423,6 @@ class TranscriptionCoordinator(
         engine.updateHypothesisText("")
         engine.chunkManager.confirmedText = engine.confirmedText.value
         Log.i("TranscriptionCoordinator", "stopRecording (self-recording): text='${engine.confirmedText.value.take(80)}'")
-    }
-
-    fun finalizeBufferedRecordingStop() {
-        engine.audioRecorder.stopRecording()
-        engine.chunkManager.finalizeCurrentChunk()
-        engine.updateConfirmedText(engine.chunkManager.confirmedText)
-        engine.updateHypothesisText("")
-        Log.i("TranscriptionCoordinator", "stopRecording: finalized text='${engine.confirmedText.value.take(80)}' audio=${engine.audioRecorder.bufferSeconds}s")
     }
 
     // MARK: - Text Normalization

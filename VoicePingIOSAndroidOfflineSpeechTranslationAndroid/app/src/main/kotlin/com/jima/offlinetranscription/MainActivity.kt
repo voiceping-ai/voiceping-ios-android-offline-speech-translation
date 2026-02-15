@@ -28,7 +28,6 @@ class MainActivity : ComponentActivity() {
     private fun e2eLoadTimeoutMs(modelId: String): Long = when {
         modelId.contains("large") -> 1_200_000L
         modelId.contains("omnilingual") -> 600_000L
-        modelId.contains("parakeet") -> 900_000L
         modelId.contains("small") -> 1_200_000L
         modelId.contains("base") -> 600_000L
         else -> 120_000L
