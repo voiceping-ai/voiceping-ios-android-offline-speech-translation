@@ -906,6 +906,12 @@ public sealed partial class SpeechTranslationService : ObservableObject, IDispos
             return;
         }
 
+        OfflineSpeechTranslation.App.Evidence.LogEvent("translation_model_prepare_start", new
+        {
+            source = src,
+            target = tgt
+        });
+
         // Poll the translation engine state while PrepareAsync runs so the UI can show progress.
         using var pollCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var pollTask = Task.Run(async () =>
@@ -935,6 +941,16 @@ public sealed partial class SpeechTranslationService : ObservableObject, IDispos
         {
             await _translationEngine.PrepareAsync(src, tgt, ct);
         }
+        catch (Exception ex)
+        {
+            OfflineSpeechTranslation.App.Evidence.LogEvent("translation_model_prepare_failed", new
+            {
+                source = src,
+                target = tgt,
+                error = ex.ToString()
+            }, level: "error");
+            throw;
+        }
         finally
         {
             try { pollCts.Cancel(); } catch { /* best-effort */ }
@@ -948,6 +964,13 @@ public sealed partial class SpeechTranslationService : ObservableObject, IDispos
             TranslationDownloadStatus = _translationEngine.DownloadStatus;
             if (!string.IsNullOrWhiteSpace(_translationEngine.Warning))
                 TranslationWarning = _translationEngine.Warning;
+        });
+
+        OfflineSpeechTranslation.App.Evidence.LogEvent("translation_model_prepare_done", new
+        {
+            source = src,
+            target = tgt,
+            ready = _translationEngine.ModelReady
         });
     }
 
@@ -994,6 +1017,13 @@ public sealed partial class SpeechTranslationService : ObservableObject, IDispos
             PostUI(() =>
             {
                 TtsStartCount++;
+            });
+
+            OfflineSpeechTranslation.App.Evidence.LogEvent("tts_speak_delta", new
+            {
+                language = languageCode,
+                rate = TtsRate,
+                textLength = delta.Length
             });
 
             await _ttsService.SpeakAsync(

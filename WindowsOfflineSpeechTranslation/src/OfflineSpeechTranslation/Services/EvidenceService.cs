@@ -156,6 +156,29 @@ public sealed class EvidenceService
             var models = ModelEvidence.CaptureAll(ModelInfo.AvailableModels);
             s.WriteJson("models/installed_models.json", models);
 
+            // Translation models (installed / downloaded)
+            var translationModels = TranslationModelInfo.AvailableModels.Select(m => new
+            {
+                id = m.Id,
+                displayName = m.DisplayName,
+                source = m.SourceLanguageCode,
+                target = m.TargetLanguageCode,
+                downloaded = TranslationModelDownloader.IsModelDownloaded(m),
+                modelDir = TranslationModelDownloader.GetModelDir(m),
+                extractedDir = TranslationModelDownloader.GetExtractedDir(m)
+            }).ToList();
+            s.WriteJson("models/translation_models.json", translationModels);
+
+            // TTS evidence directory inventory (best-effort)
+            var ttsEvidenceDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "OfflineSpeechTranslation", "TtsEvidence");
+            s.WriteJson("tts/evidence_dir.json", new
+            {
+                path = ttsEvidenceDir,
+                files = GetDirectoryInventory(ttsEvidenceDir, "*.wav")
+            });
+
             // Native DLL inventory (best-effort)
             s.WriteJson("native/dll_inventory.json", new
             {
@@ -169,7 +192,11 @@ public sealed class EvidenceService
             // Audio devices (best-effort; very useful for loopback/multi-channel debugging)
             s.WriteJson("audio/devices.json", GetAudioDevicesEvidence());
 
-            s.AppendEvent("baseline_captured", new { modelsCount = models.Models.Count });
+            s.AppendEvent("baseline_captured", new
+            {
+                modelsCount = models.Models.Count,
+                translationModelsCount = translationModels.Count
+            });
         }
         catch (Exception ex)
         {
