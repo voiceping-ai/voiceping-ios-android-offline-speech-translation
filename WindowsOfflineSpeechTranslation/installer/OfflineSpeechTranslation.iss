@@ -7,7 +7,7 @@
 #endif
 
 #ifndef OutputBaseName
-  #define OutputBaseName "OfflineTranscription-win-x64-setup"
+  #define OutputBaseName "OfflineSpeechTranslation-win-x64-setup"
 #endif
 
 #ifndef AppVersion
@@ -16,11 +16,11 @@
 
 [Setup]
 AppId={{D8BA63C5-230D-4CB4-95FC-CFDBE6179422}
-AppName=Offline Transcription
+AppName=Offline Speech Translation
 AppVersion={#AppVersion}
-AppPublisher=OfflineTranscription
-DefaultDirName={autopf}\Offline Transcription
-DefaultGroupName=Offline Transcription
+AppPublisher=OfflineSpeechTranslation
+DefaultDirName={autopf}\Offline Speech Translation
+DefaultGroupName=Offline Speech Translation
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputBaseName}
@@ -29,7 +29,7 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\OfflineTranscription.exe
+UninstallDisplayIcon={app}\OfflineSpeechTranslation.exe
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -41,9 +41,9 @@ Name: "desktopicon"; Description: "Create a &desktop icon"; Flags: unchecked
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Offline Transcription"; Filename: "{app}\OfflineTranscription.exe"
-Name: "{autodesktop}\Offline Transcription"; Filename: "{app}\OfflineTranscription.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Offline Speech Translation"; Filename: "{app}\OfflineSpeechTranslation.exe"
+Name: "{autodesktop}\Offline Speech Translation"; Filename: "{app}\OfflineSpeechTranslation.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\OfflineTranscription.exe"; Description: "Launch Offline Transcription"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\OfflineSpeechTranslation.exe"; Description: "Launch Offline Speech Translation"; Flags: nowait postinstall skipifsilent
 

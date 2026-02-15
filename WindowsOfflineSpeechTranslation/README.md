@@ -1,16 +1,19 @@
-# Windows Offline Transcribe
+# Windows Offline Speech Translation
 
-WinUI 3 (Windows App SDK) desktop app for offline speech transcription.
-All ASR inference runs locally after model download.
+WinUI 3 (Windows App SDK) desktop app for offline speech translation:
+ASR -> translation -> TTS (WAV evidence + playback).
+All inference runs locally after model download.
 
 ## Current Scope (Code-Accurate)
 
 - Live transcription with confirmed text plus rolling hypothesis.
+- Real-time translation (debounced) with translated confirmed + hypothesis.
+- Optional speak-translated-audio (TTS) with feedback-loop guard (stops capture while speaking).
 - Audio source switching: `Microphone`, `System Audio (WASAPI loopback)`.
 - In-app model download/load/switch (9 models across 3 engine types).
 - File transcription (`.wav`, `.mp3`).
 - Runtime stats while recording (`CPU`, `RAM`, `tok/s`, elapsed audio). Note: `tok/s` is a rough word-per-second estimate.
-- History: saves transcript + session audio; export a shareable ZIP (text + metadata + audio).
+- History: saves transcript + translation + session audio + optional TTS evidence; export a shareable ZIP.
 - Diagnostics: `Evidence Mode` (events.jsonl + model manifests + screenshots; export one ZIP).
 
 ## Supported Models
@@ -32,7 +35,17 @@ Models are downloaded from Hugging Face at runtime and stored under `%LOCALAPPDA
 
 Model weights are not distributed with this repo; model licensing varies. See `NOTICE`.
 
-> **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added, or you have benchmark results to share from your hardware, please [open an issue](https://github.com/atyenoria/windows-offline-transcribe/issues/new). Community contributions of inference benchmarks on different Windows devices are welcome.
+## Offline Translation Models
+
+Defined in `src/OfflineSpeechTranslation/Models/TranslationModelInfo.cs`.
+
+Models are downloaded as a single `.zip`, extracted, and stored under:
+
+`%LOCALAPPDATA%\\OfflineSpeechTranslation\\TranslationModels\\<model-id>\\model\\`
+
+Notes:
+- The default URLs in `TranslationModelInfo` are placeholders. Update them to point to your hosted CT2 model zips.
+- Each zip should include the CT2 model files at the root plus SentencePiece tokenizers (`source.spm`/`target.spm` or `spm.model`).
 
 ## Engines / Inference Methods
 
@@ -69,6 +82,7 @@ This app uses native engines via P/Invoke:
 
 - whisper.cpp: `whisper.dll` (see `src/OfflineSpeechTranslation/Interop/WhisperNative.cs`)
 - sherpa-onnx C API: `sherpa-onnx-c-api.dll` (see `src/OfflineSpeechTranslation/Interop/SherpaOnnxNative.cs`)
+- translation: `OfflineSpeechTranslation.NativeTranslation.dll` (see `src/OfflineSpeechTranslation/Interop/NativeTranslation.cs`)
 
 Place required `.dll` files in:
 

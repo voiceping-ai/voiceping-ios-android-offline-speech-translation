@@ -26,6 +26,22 @@ public static class SessionFileManager
         return $"{SessionsDirName}/{sessionId}/audio.wav";
     }
 
+    /// <summary>
+    /// Copy a TTS evidence WAV into the session directory. Returns the relative file name.
+    /// </summary>
+    public static string SaveTtsEvidence(string sessionId, string sourceWavPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourceWavPath) || !File.Exists(sourceWavPath))
+            throw new FileNotFoundException("TTS evidence WAV not found.", sourceWavPath);
+
+        var dir = Path.Combine(SessionsBaseDir, sessionId);
+        Directory.CreateDirectory(dir);
+
+        var destPath = Path.Combine(dir, "tts.wav");
+        File.Copy(sourceWavPath, destPath, overwrite: true);
+        return $"{SessionsDirName}/{sessionId}/tts.wav";
+    }
+
     /// <summary>Get absolute path for a relative audio file name.</summary>
     public static string GetAbsolutePath(string relativeFileName)
     {

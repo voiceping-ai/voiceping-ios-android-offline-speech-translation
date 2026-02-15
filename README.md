@@ -1,5 +1,7 @@
 # iOS + Android Offline Speech Translation
 
+[![Build](https://github.com/voiceping-ai/ios-android-offline-speech-translation/actions/workflows/build.yml/badge.svg)](https://github.com/voiceping-ai/ios-android-offline-speech-translation/actions/workflows/build.yml)
+
 Cross-platform offline speech app with transcription, translation, TTS, and history/export flows.
 This repository currently ships a focused model set per platform.
 
@@ -142,24 +144,28 @@ Android uses the [AudioPlaybackCapture API](https://developer.android.com/guide/
 
 ### iOS
 
-- Orchestrator: `OfflineTranscription/Services/WhisperService.swift`
+- Orchestrator: `OfflineTranscription/Services/WhisperService.swift` + `TranscriptionCoordinator.swift` (inference loop, VAD, chunking)
 - Engines:
-- `SherpaOnnxOfflineEngine`
-- `AppleSpeechEngine`
-- Translation: `AppleTranslationService`
-- TTS: `NativeTTSService`
+  - `SherpaOnnxOfflineEngine` — SenseVoice via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) ONNX Runtime
+  - `AppleSpeechEngine` — Built-in [SFSpeechRecognizer](https://developer.apple.com/documentation/speech/sfspeechrecognizer)
+- Translation: `AppleTranslationService` (iOS 18+)
+- TTS: `NativeTTSService` (`AVSpeechSynthesizer`)
+- Supporting services: `EngineFactory`, `ModelDownloader`, `SystemMetrics`
+- Audio capture: `AudioRecorder` (microphone), `SystemAudioSource` (ReplayKit ring buffer IPC)
 - Persistence/export: SwiftData + `SessionFileManager` + `ZIPExporter`
 
 ### Android
 
-- Orchestrator: `.../service/WhisperEngine.kt`
+- Orchestrator: `.../service/WhisperEngine.kt` + `TranscriptionCoordinator.kt` (inference loop, VAD, chunking)
 - Engines:
-- `SherpaOnnxEngine`
-- `AndroidSpeechEngine`
+  - `SherpaOnnxEngine` — SenseVoice via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) ONNX Runtime
+  - `AndroidSpeechEngine` — Android [SpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer) (online/offline)
 - Translation:
-- `MlKitTranslator`
-- `AndroidSystemTranslator`
-- TTS: `AndroidTtsService`
+  - `MlKitTranslator` — Google ML Kit offline (20 language pairs)
+  - `AndroidSystemTranslator` — Android system translation (API 31+)
+- TTS: `AndroidTtsService` (`TextToSpeech`)
+- Supporting services: `E2ETestOrchestrator`, `StreamingChunkManager`, `SystemMetrics`, `ModelDownloader`
+- Audio capture: `AudioRecorder` (microphone + MediaProjection playback capture), `MediaProjectionService`
 - Persistence/export: Room + `AudioPlaybackManager` + `SessionExporter`
 
 ## Requirements
@@ -234,25 +240,17 @@ Fixture: `artifacts/benchmarks/long_en_eval.wav` (30.00s, 16kHz mono WAV)
 - `tok/s` uses `tokens_per_second` from `result.json` when present; otherwise `Words / duration_sec`.
 - `RTF = duration_sec / audio_duration_sec`.
 
-#### iOS Graph
-
-![iOS tokens/sec](artifacts/benchmarks/ios_tokens_per_second.svg)
-
 #### iOS Results
 
-| Model | Engine | Words | Inference (ms) | Tok/s | RTF | Result |
+| Model | Engine | Words | Inference (ms) | Tok/s | RTF | Status |
 |---|---|---:|---:|---:|---:|---|
-| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 2458 | 23.59 | 0.08 | PASS |
-
-#### Android Graph
-
-![Android tokens/sec](artifacts/benchmarks/android_tokens_per_second.svg)
+| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 2458 | 23.59 | 0.08 | ✅ PASS |
 
 #### Android Results
 
-| Model | Engine | Words | Inference (ms) | Tok/s | RTF | Result |
+| Model | Engine | Words | Inference (ms) | Tok/s | RTF | Status |
 |---|---|---:|---:|---:|---:|---|
-| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 1725 | 33.63 | 0.06 | PASS |
+| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 1725 | 33.63 | 0.06 | ✅ PASS |
 
 #### Reproduce
 

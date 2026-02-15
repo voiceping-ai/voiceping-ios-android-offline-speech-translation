@@ -3,24 +3,24 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0
 WORKDIR /app
 
 # Copy everything needed for the test project
-COPY src/OfflineTranscription/Models/ src/OfflineTranscription/Models/
-COPY src/OfflineTranscription/Services/StreamingChunkManager.cs src/OfflineTranscription/Services/
-COPY src/OfflineTranscription/Services/ModelDownloader.cs src/OfflineTranscription/Services/
-COPY src/OfflineTranscription/Services/EngineFactory.cs src/OfflineTranscription/Services/
-COPY src/OfflineTranscription/Services/SystemMetrics.cs src/OfflineTranscription/Services/
-COPY src/OfflineTranscription/Interfaces/ src/OfflineTranscription/Interfaces/
-COPY src/OfflineTranscription/Engines/ src/OfflineTranscription/Engines/
-COPY src/OfflineTranscription/Interop/ src/OfflineTranscription/Interop/
-COPY src/OfflineTranscription/Utilities/WavWriter.cs src/OfflineTranscription/Utilities/
-COPY src/OfflineTranscription/Utilities/SessionFileManager.cs src/OfflineTranscription/Utilities/
-COPY src/OfflineTranscription/Utilities/ZipExporter.cs src/OfflineTranscription/Utilities/
-COPY src/OfflineTranscription/Utilities/EvidenceSession.cs src/OfflineTranscription/Utilities/
-COPY src/OfflineTranscription/Utilities/ModelEvidence.cs src/OfflineTranscription/Utilities/
-COPY tests/OfflineTranscription.Tests/ tests/OfflineTranscription.Tests/
+COPY src/OfflineSpeechTranslation/Models/ src/OfflineSpeechTranslation/Models/
+COPY src/OfflineSpeechTranslation/Services/StreamingChunkManager.cs src/OfflineSpeechTranslation/Services/
+COPY src/OfflineSpeechTranslation/Services/ModelDownloader.cs src/OfflineSpeechTranslation/Services/
+COPY src/OfflineSpeechTranslation/Services/EngineFactory.cs src/OfflineSpeechTranslation/Services/
+COPY src/OfflineSpeechTranslation/Services/SystemMetrics.cs src/OfflineSpeechTranslation/Services/
+COPY src/OfflineSpeechTranslation/Interfaces/ src/OfflineSpeechTranslation/Interfaces/
+COPY src/OfflineSpeechTranslation/Engines/ src/OfflineSpeechTranslation/Engines/
+COPY src/OfflineSpeechTranslation/Interop/ src/OfflineSpeechTranslation/Interop/
+COPY src/OfflineSpeechTranslation/Utilities/WavWriter.cs src/OfflineSpeechTranslation/Utilities/
+COPY src/OfflineSpeechTranslation/Utilities/SessionFileManager.cs src/OfflineSpeechTranslation/Utilities/
+COPY src/OfflineSpeechTranslation/Utilities/ZipExporter.cs src/OfflineSpeechTranslation/Utilities/
+COPY src/OfflineSpeechTranslation/Utilities/EvidenceSession.cs src/OfflineSpeechTranslation/Utilities/
+COPY src/OfflineSpeechTranslation/Utilities/ModelEvidence.cs src/OfflineSpeechTranslation/Utilities/
+COPY tests/OfflineSpeechTranslation.Tests/ tests/OfflineSpeechTranslation.Tests/
 
 # Restore and build
-RUN dotnet restore tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj
-RUN dotnet build tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj -c Release --no-restore
+RUN dotnet restore tests/OfflineSpeechTranslation.Tests/OfflineSpeechTranslation.Tests.csproj
+RUN dotnet build tests/OfflineSpeechTranslation.Tests/OfflineSpeechTranslation.Tests.csproj -c Release --no-restore
 
 # Run tests
-ENTRYPOINT ["dotnet", "test", "tests/OfflineTranscription.Tests/OfflineTranscription.Tests.csproj", "-c", "Release", "--no-build", "--verbosity", "normal", "--logger", "trx;LogFileName=test-results.trx"]
+ENTRYPOINT ["dotnet", "test", "tests/OfflineSpeechTranslation.Tests/OfflineSpeechTranslation.Tests.csproj", "-c", "Release", "--no-build", "--verbosity", "normal", "--logger", "trx;LogFileName=test-results.trx"]

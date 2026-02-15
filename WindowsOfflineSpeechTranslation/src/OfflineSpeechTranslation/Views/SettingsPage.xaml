@@ -72,6 +72,38 @@
 
             <Border Height="1" Margin="0,8" Background="#33000000" />
 
+            <!-- Translation / TTS -->
+            <TextBlock Text="Translation" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <ToggleSwitch Header="Enable Translation"
+                          IsOn="{x:Bind Service.TranslationEnabled, Mode=TwoWay}" />
+
+            <TextBox Header="Source Language (BCP-47, e.g. en)"
+                     Text="{x:Bind Service.TranslationSourceLanguageCode, Mode=TwoWay}" />
+            <TextBox Header="Target Language (BCP-47, e.g. ja)"
+                     Text="{x:Bind Service.TranslationTargetLanguageCode, Mode=TwoWay}" />
+
+            <TextBlock FontSize="12" Opacity="0.6"
+                       Text="{x:Bind Service.TranslationDownloadStatus, Mode=OneWay}" />
+            <ProgressBar Value="{x:Bind Service.TranslationDownloadProgress, Mode=OneWay}"
+                         Maximum="1.0" />
+            <TextBlock FontSize="12" Opacity="0.6"
+                       Foreground="DarkOrange"
+                       Text="{x:Bind Service.TranslationWarning, Mode=OneWay}" />
+
+            <ToggleSwitch Header="Speak Translated Audio"
+                          IsOn="{x:Bind Service.SpeakTranslatedAudio, Mode=TwoWay}" />
+
+            <StackPanel>
+                <TextBlock Text="{x:Bind TtsRateLabel, Mode=OneWay}" FontSize="12" Opacity="0.7" />
+                <Slider Minimum="0.25" Maximum="2.0" StepFrequency="0.05"
+                        Value="{x:Bind Service.TtsRate, Mode=TwoWay}" />
+            </StackPanel>
+
+            <TextBox Header="TTS Voice Id (optional)"
+                     Text="{x:Bind Service.TtsVoiceId, Mode=TwoWay}" />
+
+            <Border Height="1" Margin="0,8" Background="#33000000" />
+
             <!-- Diagnostics / Evidence -->
             <TextBlock Text="Diagnostics" Style="{StaticResource SubtitleTextBlockStyle}" />
             <ToggleSwitch x:Name="EvidenceModeToggle"
@@ -94,9 +126,9 @@
             <TextBlock Text="About" Style="{StaticResource SubtitleTextBlockStyle}"
                        Margin="0,16,0,0" />
             <TextBlock FontSize="12" Opacity="0.5">
-                Offline Transcription for Windows v1.0
+                Offline Speech Translation for Windows v1.0
                 <LineBreak />
-                Engines: whisper.cpp, sherpa-onnx (DirectML)
+                Engines: whisper.cpp, sherpa-onnx (DirectML), CTranslate2, Windows.Media TTS
             </TextBlock>
         </StackPanel>
     </ScrollViewer>

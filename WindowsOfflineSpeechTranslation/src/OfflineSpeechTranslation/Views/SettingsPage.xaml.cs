@@ -10,10 +10,12 @@ namespace OfflineSpeechTranslation.Views;
 public sealed partial class SettingsPage : Page
 {
     public AppPreferences Prefs => App.Preferences;
-    private SpeechTranslationService Service => App.SpeechTranslationService;
+    public SpeechTranslationService Service => App.SpeechTranslationService;
     private EvidenceService Evidence => App.Evidence;
 
     private bool _initializing;
+
+    public string TtsRateLabel => $"TTS Rate: {Service.TtsRate:0.00}x";
 
     public SettingsPage()
     {
@@ -29,6 +31,12 @@ public sealed partial class SettingsPage : Page
         EvidenceModeToggle.IsOn = Prefs.EvidenceMode;
         EvidenceIncludeTextToggle.IsOn = Prefs.EvidenceIncludeTranscriptText;
         UpdateEvidenceStatusText();
+
+        Service.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SpeechTranslationService.TtsRate))
+                DispatcherQueue.TryEnqueue(() => Bindings.Update());
+        };
 
         _initializing = false;
     }

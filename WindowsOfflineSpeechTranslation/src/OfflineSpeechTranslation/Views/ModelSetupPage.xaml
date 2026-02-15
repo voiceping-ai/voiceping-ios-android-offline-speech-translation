@@ -6,7 +6,7 @@
     <Grid RowDefinitions="Auto,*,Auto" Padding="32">
 
         <StackPanel Grid.Row="0" Margin="0,24,0,24">
-            <TextBlock Text="Offline Transcription"
+            <TextBlock Text="Offline Speech Translation"
                        Style="{StaticResource TitleTextBlockStyle}" />
             <TextBlock Text="Select a model to get started. Models are downloaded once and work completely offline."
                        Opacity="0.7" Margin="0,8,0,0" TextWrapping="Wrap" />

@@ -6,7 +6,7 @@ namespace OfflineSpeechTranslation.Interop;
 internal static class NativeTranslation
 {
     // Native DLL built from src/OfflineSpeechTranslation.NativeTranslation
-    private const string DllName = "OfflineSpeechTranslation.NativeTranslation.dll";
+    private const string DllName = "OfflineSpeechTranslation.NativeTranslation";
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int OST_CreateTranslator(

@@ -66,6 +66,42 @@ public sealed class AppPreferences
         set { _data.EvidenceIncludeTranscriptText = value; Save(); }
     }
 
+    public bool TranslationEnabled
+    {
+        get => _data.TranslationEnabled;
+        set { _data.TranslationEnabled = value; Save(); }
+    }
+
+    public string TranslationSourceLanguageCode
+    {
+        get => string.IsNullOrWhiteSpace(_data.TranslationSourceLanguageCode) ? "en" : _data.TranslationSourceLanguageCode;
+        set { _data.TranslationSourceLanguageCode = (value ?? "").Trim(); Save(); }
+    }
+
+    public string TranslationTargetLanguageCode
+    {
+        get => string.IsNullOrWhiteSpace(_data.TranslationTargetLanguageCode) ? "ja" : _data.TranslationTargetLanguageCode;
+        set { _data.TranslationTargetLanguageCode = (value ?? "").Trim(); Save(); }
+    }
+
+    public bool SpeakTranslatedAudio
+    {
+        get => _data.SpeakTranslatedAudio;
+        set { _data.SpeakTranslatedAudio = value; Save(); }
+    }
+
+    public float TtsRate
+    {
+        get => _data.TtsRate;
+        set { _data.TtsRate = value; Save(); }
+    }
+
+    public string? TtsVoiceId
+    {
+        get => _data.TtsVoiceId;
+        set { _data.TtsVoiceId = value; Save(); }
+    }
+
     public AppPreferences()
     {
         _data = Load();
@@ -115,5 +151,12 @@ public sealed class AppPreferences
         public bool EvidenceMode { get; set; } = false;
         public string? EvidenceSessionFolder { get; set; }
         public bool EvidenceIncludeTranscriptText { get; set; } = false;
+
+        public bool TranslationEnabled { get; set; } = true;
+        public string TranslationSourceLanguageCode { get; set; } = "en";
+        public string TranslationTargetLanguageCode { get; set; } = "ja";
+        public bool SpeakTranslatedAudio { get; set; } = true;
+        public float TtsRate { get; set; } = 1.0f;
+        public string? TtsVoiceId { get; set; }
     }
 }

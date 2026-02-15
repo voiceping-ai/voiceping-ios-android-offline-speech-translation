@@ -27,7 +27,7 @@ dotnet --list-sdks
 # Copy project from Samba share to local disk for faster builds
 Write-Host "`n=== Copying project to local disk ===" -ForegroundColor Cyan
 $projectSrc = "\\host.lan\Data"
-$localProject = "C:\Dev\windows-offline-transcribe"
+$localProject = "C:\Dev\windows-offline-speech-translation"
 
 if (Test-Path $projectSrc) {
     New-Item -ItemType Directory -Force -Path $localProject | Out-Null

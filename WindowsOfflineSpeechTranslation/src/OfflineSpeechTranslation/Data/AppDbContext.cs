@@ -44,7 +44,12 @@ public class AppDbContext : DbContext
             entity.Property(e => e.DurationSeconds);
             entity.Property(e => e.ModelUsed);
             entity.Property(e => e.Language);
+            entity.Property(e => e.TranslatedText);
+            entity.Property(e => e.TranslationSourceLanguage);
+            entity.Property(e => e.TranslationTargetLanguage);
+            entity.Property(e => e.TranslationModelId);
             entity.Property(e => e.AudioFileName);
+            entity.Property(e => e.TtsEvidenceFileName);
         });
     }
 
@@ -53,6 +58,51 @@ public class AppDbContext : DbContext
     {
         using var db = new AppDbContext();
         db.Database.EnsureCreated();
+        EnsureSchemaUpToDate(db);
         EnableWalMode();
+    }
+
+    private static void EnsureSchemaUpToDate(AppDbContext db)
+    {
+        // EnsureCreated does not update an existing database, so we do a minimal additive schema migration.
+        // All additions are nullable columns to keep the migration safe.
+        try
+        {
+            var conn = db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+                conn.Open();
+
+            var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info('Transcriptions');";
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    // Columns: cid, name, type, notnull, dflt_value, pk
+                    if (reader.FieldCount > 1 && reader.GetValue(1) is string name && !string.IsNullOrWhiteSpace(name))
+                        existing.Add(name);
+                }
+            }
+
+            void EnsureTextColumn(string name)
+            {
+                if (existing.Contains(name)) return;
+                using var alter = conn.CreateCommand();
+                alter.CommandText = $"ALTER TABLE Transcriptions ADD COLUMN {name} TEXT;";
+                alter.ExecuteNonQuery();
+                existing.Add(name);
+            }
+
+            EnsureTextColumn("TranslatedText");
+            EnsureTextColumn("TranslationSourceLanguage");
+            EnsureTextColumn("TranslationTargetLanguage");
+            EnsureTextColumn("TranslationModelId");
+            EnsureTextColumn("TtsEvidenceFileName");
+        }
+        catch
+        {
+            // Best-effort: schema upgrades can fail on locked DBs; app still works without translation history.
+        }
     }
 }

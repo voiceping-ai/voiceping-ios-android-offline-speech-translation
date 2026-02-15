@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:OfflineSpeechTranslation"
-    Title="Offline Transcription">
+    Title="Offline Speech Translation">
 
     <NavigationView
         x:Name="NavView"
@@ -13,7 +13,7 @@
         SelectionChanged="NavView_SelectionChanged">
 
         <NavigationView.MenuItems>
-            <NavigationViewItem Content="Transcribe" Tag="Transcription"
+            <NavigationViewItem Content="Translate" Tag="Transcription"
                                 Icon="Microphone" />
             <NavigationViewItem Content="History" Tag="History"
                                 Icon="Clock" />

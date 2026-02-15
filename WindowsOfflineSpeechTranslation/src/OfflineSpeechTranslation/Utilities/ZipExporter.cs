@@ -7,7 +7,7 @@ namespace OfflineSpeechTranslation.Utilities;
 /// <summary>
 /// Exports a transcription session as a ZIP archive.
 /// Port of iOS ZIPExporter.swift / Android SessionExporter.kt.
-/// Bundle: transcript.txt + metadata.json + audio.wav
+/// Bundle: transcript.txt + translation.txt + metadata.json + audio.wav + tts.wav
 /// </summary>
 public static class ZipExporter
 {
@@ -19,7 +19,7 @@ public static class ZipExporter
     {
         Directory.CreateDirectory(outputDir);
 
-        string zipName = $"transcription_{record.CreatedAt:yyyyMMdd_HHmmss}.zip";
+        string zipName = $"speech_translation_{record.CreatedAt:yyyyMMdd_HHmmss}.zip";
         string zipPath = Path.Combine(outputDir, zipName);
 
         if (File.Exists(zipPath))
@@ -34,6 +34,14 @@ public static class ZipExporter
             writer.Write(record.Text);
         }
 
+        // translation.txt
+        if (!string.IsNullOrWhiteSpace(record.TranslatedText))
+        {
+            var translationEntry = archive.CreateEntry("translation.txt");
+            using var writer = new StreamWriter(translationEntry.Open());
+            writer.Write(record.TranslatedText);
+        }
+
         // metadata.json
         var metadata = new
         {
@@ -41,7 +49,18 @@ public static class ZipExporter
             createdAt = record.CreatedAt.ToString("O"),
             durationSeconds = record.DurationSeconds,
             modelUsed = record.ModelUsed,
-            language = record.Language
+            language = record.Language,
+            translation = new
+            {
+                source = record.TranslationSourceLanguage,
+                target = record.TranslationTargetLanguage,
+                modelId = record.TranslationModelId,
+                hasTranslationText = !string.IsNullOrWhiteSpace(record.TranslatedText)
+            },
+            tts = new
+            {
+                evidenceFileName = record.TtsEvidenceFileName
+            }
         };
         var metaEntry = archive.CreateEntry("metadata.json");
         using (var stream = metaEntry.Open())
@@ -56,6 +75,16 @@ public static class ZipExporter
             if (File.Exists(audioPath))
             {
                 archive.CreateEntryFromFile(audioPath, "audio.wav");
+            }
+        }
+
+        // tts.wav (if available)
+        if (!string.IsNullOrEmpty(record.TtsEvidenceFileName))
+        {
+            var ttsPath = SessionFileManager.GetAbsolutePath(record.TtsEvidenceFileName);
+            if (File.Exists(ttsPath))
+            {
+                archive.CreateEntryFromFile(ttsPath, "tts.wav");
             }
         }
 

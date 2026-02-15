@@ -17,12 +17,25 @@
             </StackPanel>
         </StackPanel>
 
-        <!-- Full transcript -->
+        <!-- Transcript + translation -->
         <ScrollViewer Grid.Row="1">
-            <TextBlock x:Name="TranscriptText"
-                       TextWrapping="Wrap"
-                       IsTextSelectionEnabled="True"
-                       FontSize="15" />
+            <StackPanel Spacing="16">
+                <StackPanel>
+                    <TextBlock Text="Transcript" FontSize="12" Opacity="0.6" />
+                    <TextBlock x:Name="TranscriptText"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               FontSize="15" />
+                </StackPanel>
+
+                <StackPanel x:Name="TranslationSection" Visibility="Collapsed">
+                    <TextBlock Text="Translation" FontSize="12" Opacity="0.6" />
+                    <TextBlock x:Name="TranslationText"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               FontSize="15" />
+                </StackPanel>
+            </StackPanel>
         </ScrollViewer>
 
         <!-- Waveform playback (if audio available) -->
@@ -36,7 +49,9 @@
         <!-- Actions -->
         <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8"
                     HorizontalAlignment="Right">
-            <Button Content="Copy Text" Click="CopyText_Click" />
+            <Button Content="Copy Transcript" Click="CopyTranscript_Click" />
+            <Button x:Name="CopyTranslationButton" Content="Copy Translation" Click="CopyTranslation_Click"
+                    Visibility="Collapsed" />
             <Button Content="Export ZIP" Click="ExportZip_Click" />
         </StackPanel>
     </Grid>
