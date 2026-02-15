@@ -72,6 +72,7 @@ VoicePingIOSAndroidOfflineSpeechTranslationAndroid/.kotlin/
 # sherpa-onnx binaries (download from GitHub releases, see README)
 VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/libs/*.aar
 LocalPackages/SherpaOnnxKit/*.xcframework/
+LocalPackages/SherpaOnnxKit/.sherpa_ios_deps
 
 # === Room Schema Exports (using manual migrations) ===
 VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/schemas/

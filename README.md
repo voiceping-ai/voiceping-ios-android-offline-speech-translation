@@ -23,9 +23,7 @@ This repository currently ships a focused model set per platform.
 
 ### Windows (Desktop)
 
-- WinUI 3 desktop app: `WindowsOfflineSpeechTranslation/`
-- Pipeline: on-device ASR (whisper.cpp / sherpa-onnx) -> offline translation (CTranslate2 wrapper) -> native TTS (Windows.Media) with WAV evidence
-- Audio sources: microphone + system audio (WASAPI loopback)
+- The Windows desktop app has moved to the separate repository `windows-offline-transcribe/`.
 
 ## Current Scope (Code-Accurate)
 
