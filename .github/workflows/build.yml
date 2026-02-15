@@ -1,0 +1,208 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android-build:
+    name: Android Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run minimal unit test script
+        run: |
+          chmod +x ./scripts/ci-android-unit-test.sh
+          ./scripts/ci-android-unit-test.sh
+
+      - name: Build Android release binaries
+        working-directory: VoicePingIOSAndroidOfflineSpeechTranslationAndroid
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: Validate Android binaries
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=(
+            VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/debug/*.apk
+            VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/release/*.apk
+            VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/bundle/release/*.aab
+          )
+
+          mkdir -p build
+          : > build/android-binaries.sha256
+
+          for f in "${files[@]}"; do
+            [ -s "$f" ] || { echo "Missing or empty binary: $f" >&2; exit 1; }
+            unzip -t "$f" >/dev/null
+            sha256sum "$f" | tee -a build/android-binaries.sha256
+          done
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-apk
+          path: VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - name: Upload release AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release-aab
+          path: VoicePingIOSAndroidOfflineSpeechTranslationAndroid/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      - name: Upload Android checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-binaries-checksums
+          path: build/android-binaries.sha256
+          if-no-files-found: error
+
+  ios-build:
+    name: iOS Build
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Download iOS binary dependencies
+        run: |
+          chmod +x ./scripts/setup-ios-deps.sh
+          ./scripts/setup-ios-deps.sh
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Run minimal unit test script
+        run: |
+          chmod +x ./scripts/ci-ios-unit-test.sh
+          ./scripts/ci-ios-unit-test.sh
+
+      - name: Package iOS simulator app
+        run: |
+          app_path="build/DerivedData/Build/Products/Debug-iphonesimulator/OfflineTranscription.app"
+          zip_path="build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip"
+          rm -f "$zip_path"
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
+
+      - name: Validate iOS simulator package
+        run: |
+          set -euo pipefail
+          zip_path="build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip"
+          [ -s "$zip_path" ] || { echo "Missing or empty iOS package: $zip_path" >&2; exit 1; }
+          unzip -t "$zip_path" >/dev/null
+          unzip -l "$zip_path" | grep -q "OfflineTranscription\\.app/"
+          shasum -a 256 "$zip_path" | tee build/ios-simulator.sha256
+
+      - name: Upload iOS app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-app
+          path: build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip
+          if-no-files-found: error
+
+      - name: Upload iOS checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator-checksum
+          path: build/ios-simulator.sha256
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - android-build
+      - ios-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Android debug APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-debug-apk
+          path: release-assets/android
+
+      - name: Download Android release APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release-apk
+          path: release-assets/android
+
+      - name: Download Android release AAB artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-release-aab
+          path: release-assets/android
+
+      - name: Download Android checksum artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-binaries-checksums
+          path: release-assets/android
+
+      - name: Download iOS simulator artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-simulator-app
+          path: release-assets/ios
+
+      - name: Download iOS checksum artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-simulator-checksum
+          path: release-assets/ios
+
+      - name: Publish GitHub release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.sha }}
+          name: Build ${{ github.sha }}
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            release-assets/android/*.apk
+            release-assets/android/*.aab
+            release-assets/android/*.sha256
+            release-assets/ios/*.zip
+            release-assets/ios/*.sha256
+          fail_on_unmatched_files: true
+          overwrite_files: true
+
