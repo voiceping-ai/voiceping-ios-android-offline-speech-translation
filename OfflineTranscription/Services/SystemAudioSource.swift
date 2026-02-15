@@ -15,9 +15,8 @@ final class SystemAudioSource {
     private var pollTimer: Timer?
     private var darwinObserverToken: NSObjectProtocol?
 
-    /// Cap audioSamples to prevent unbounded memory growth.
-    private static let maxAudioSamples = 28_800_000 // ~30 min at 16kHz
-    private static let maxEnergyFrames = 60_000
+    private static let maxAudioSamples = AudioConstants.maxAudioSamples
+    private static let maxEnergyFrames = AudioConstants.maxEnergyFrames
 
     deinit {
         // Guarantee Darwin notification cleanup to prevent use-after-free
@@ -40,6 +39,7 @@ final class SystemAudioSource {
         }
 
         audioSamples = []
+        audioSamples.reserveCapacity(960_000)
         relativeEnergy = []
         isActive = true
 
@@ -73,11 +73,7 @@ final class SystemAudioSource {
         let samples = ringBuffer.readAvailable()
         guard !samples.isEmpty else { return }
 
-        // Compute energy
-        let sumSquares = samples.reduce(Float(0)) { $0 + $1 * $1 }
-        let rms = sqrt(sumSquares / Float(samples.count))
-        let dbFS = 20 * log10(max(rms, 1e-10))
-        let normalizedEnergy = max(0, min(1, (dbFS + 60) / 60))
+        let normalizedEnergy = AudioConstants.normalizedEnergy(of: samples)
 
         audioSamples.append(contentsOf: samples)
         if audioSamples.count > Self.maxAudioSamples {
@@ -98,7 +94,7 @@ final class SystemAudioSource {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
 
         // Audio ready notification — triggers buffer read
-        let audioReadyName = "com.voiceping.translate.audioReady" as CFString
+        let audioReadyName = DarwinNotifications.audioReady
         CFNotificationCenterAddObserver(
             center,
             Unmanaged.passUnretained(self).toOpaque(),
@@ -115,7 +111,7 @@ final class SystemAudioSource {
         )
 
         // Broadcast stopped notification
-        let stoppedName = "com.voiceping.translate.broadcastStopped" as CFString
+        let stoppedName = DarwinNotifications.broadcastStopped
         CFNotificationCenterAddObserver(
             center,
             Unmanaged.passUnretained(self).toOpaque(),

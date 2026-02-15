@@ -76,11 +76,12 @@ Zipformer Transducer (k2-fsa / icefall)
   License: Apache License 2.0
   Source:  https://github.com/k2-fsa/icefall
 
-NVIDIA Parakeet TDT 0.6B (NeMo)
+NVIDIA Parakeet TDT 0.6B v3 (NeMo)
   License: CC-BY-4.0 (Creative Commons Attribution 4.0)
   Note:    Commercial use is permitted. Attribution is required.
   Source:  https://github.com/NVIDIA/NeMo
-  Weights: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2
+  Weights: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+  ONNX Export: https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8
 
 Meta MMS / Omnilingual 300M
   License: CC-BY-NC-4.0 (Creative Commons Attribution-NonCommercial 4.0)

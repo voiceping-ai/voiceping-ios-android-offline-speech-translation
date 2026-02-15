@@ -10,8 +10,9 @@ class ModelInfoTest {
     @Test
     fun availableModels_hasExpectedEntries() {
         val ids = ModelInfo.availableModels.map { it.id }
-        assertEquals(3, ids.size)
+        assertEquals(4, ids.size)
         assertTrue("sensevoice-small" in ids)
+        assertTrue("parakeet-tdt-v3" in ids)
         assertTrue("android-speech-offline" in ids)
         assertTrue("android-speech-online" in ids)
     }
@@ -60,8 +61,9 @@ class ModelInfoTest {
         val grouped = ModelInfo.modelsByEngine
         val sherpa = grouped[EngineType.SHERPA_ONNX]
         assertNotNull(sherpa)
-        assertEquals(1, sherpa.size)
+        assertEquals(2, sherpa.size)
         assertTrue(sherpa.any { it.id == "sensevoice-small" })
+        assertTrue(sherpa.any { it.id == "parakeet-tdt-v3" })
 
         val androidSpeech = grouped[EngineType.ANDROID_SPEECH]
         assertNotNull(androidSpeech)
@@ -85,7 +87,7 @@ class ModelInfoTest {
     @Test
     fun enumCardinality_isExpected() {
         assertEquals(2, EngineType.entries.size)
-        assertEquals(1, SherpaModelType.entries.size)
+        assertEquals(2, SherpaModelType.entries.size)
         assertEquals(2, AndroidSpeechMode.entries.size)
         assertEquals(2, TranslationProvider.entries.size)
     }

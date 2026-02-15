@@ -6,6 +6,7 @@ import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
+import com.voiceping.offlinetranscription.util.TextNormalizationUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -168,11 +169,7 @@ class MlKitTranslator {
      * ML Kit uses BCP-47 codes directly, but we validate against supported languages.
      */
     private fun toMlKitLanguage(bcp47Code: String): String? {
-        // Defensive normalization: strip SenseVoice "<|en|>" markers and region subtags
-        val code = bcp47Code
-            .replace("<|", "").replace("|>", "")
-            .trim().lowercase()
-            .split("-").first()
-        return if (code.isNotBlank() && TranslateLanguage.getAllLanguages().contains(code)) code else null
+        val code = TextNormalizationUtils.normalizeLanguageCode(bcp47Code) ?: return null
+        return if (TranslateLanguage.getAllLanguages().contains(code)) code else null
     }
 }

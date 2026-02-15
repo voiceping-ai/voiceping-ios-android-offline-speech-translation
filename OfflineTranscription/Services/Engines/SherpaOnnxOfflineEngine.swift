@@ -1,7 +1,7 @@
 import Foundation
 import SherpaOnnxKit
 
-/// ASREngine implementation for sherpa-onnx offline SenseVoice model.
+/// ASREngine implementation for sherpa-onnx offline models (SenseVoice, Parakeet TDT).
 @MainActor
 final class SherpaOnnxOfflineEngine: ASREngine {
     var isStreaming: Bool { false }
@@ -182,27 +182,58 @@ final class SherpaOnnxOfflineEngine: ASREngine {
 
         let numThreads = recommendedOfflineThreads()
 
-        guard let senseVoiceModel = config.senseVoiceModel else {
-            throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
-                          userInfo: [NSLocalizedDescriptionKey: "Missing SenseVoice model file name in config"])
+        let modelConfig: SherpaOnnxOfflineModelConfig
+        switch config.modelType {
+        case .senseVoice:
+            guard let senseVoiceModel = config.senseVoiceModel else {
+                throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
+                              userInfo: [NSLocalizedDescriptionKey: "Missing SenseVoice model file name in config"])
+            }
+            let modelPath = "\(modelDir)/\(senseVoiceModel)"
+            guard fm.fileExists(atPath: modelPath) else {
+                throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
+                              userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(senseVoiceModel)"])
+            }
+            let senseVoiceConfig = sherpaOnnxOfflineSenseVoiceModelConfig(
+                model: modelPath,
+                language: "auto",
+                useInverseTextNormalization: true
+            )
+            modelConfig = sherpaOnnxOfflineModelConfig(
+                tokens: tokensPath,
+                numThreads: numThreads,
+                provider: provider,
+                debug: 0,
+                senseVoice: senseVoiceConfig
+            )
+
+        case .parakeetTransducer:
+            guard let encoder = config.encoder, let decoder = config.decoder, let joiner = config.joiner else {
+                throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
+                              userInfo: [NSLocalizedDescriptionKey: "Missing transducer model files (encoder/decoder/joiner) in config"])
+            }
+            let encoderPath = "\(modelDir)/\(encoder)"
+            let decoderPath = "\(modelDir)/\(decoder)"
+            let joinerPath = "\(modelDir)/\(joiner)"
+            for (path, name) in [(encoderPath, "encoder"), (decoderPath, "decoder"), (joinerPath, "joiner")] {
+                guard fm.fileExists(atPath: path) else {
+                    throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
+                                  userInfo: [NSLocalizedDescriptionKey: "Transducer \(name) not found: \(path)"])
+                }
+            }
+            let transducerConfig = sherpaOnnxOfflineTransducerModelConfig(
+                encoder: encoderPath,
+                decoder: decoderPath,
+                joiner: joinerPath
+            )
+            modelConfig = sherpaOnnxOfflineModelConfig(
+                tokens: tokensPath,
+                transducer: transducerConfig,
+                numThreads: numThreads,
+                provider: provider,
+                debug: 0
+            )
         }
-        let modelPath = "\(modelDir)/\(senseVoiceModel)"
-        guard fm.fileExists(atPath: modelPath) else {
-            throw NSError(domain: "SherpaOnnxOfflineEngine", code: -4,
-                          userInfo: [NSLocalizedDescriptionKey: "Model file not found: \(senseVoiceModel)"])
-        }
-        let senseVoiceConfig = sherpaOnnxOfflineSenseVoiceModelConfig(
-            model: modelPath,
-            language: "auto",
-            useInverseTextNormalization: true
-        )
-        let modelConfig = sherpaOnnxOfflineModelConfig(
-            tokens: tokensPath,
-            numThreads: numThreads,
-            provider: provider,
-            debug: 0,
-            senseVoice: senseVoiceConfig
-        )
 
         let featConfig = sherpaOnnxFeatureConfig(sampleRate: 16000, featureDim: 80)
         var recognizerConfig = sherpaOnnxOfflineRecognizerConfig(

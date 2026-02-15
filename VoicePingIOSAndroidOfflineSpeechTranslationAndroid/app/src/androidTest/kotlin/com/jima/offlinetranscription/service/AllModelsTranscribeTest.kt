@@ -14,7 +14,7 @@ import kotlin.test.fail
 
 /**
  * Instrumented test that downloads, loads, and transcribes a test WAV file
- * with every available model. Runs on emulator/device.
+ * with every available model. Runs on a connected device.
  *
  * Expected transcript (JFK): "ask not what your country can do for you
  * ask what you can do for your country"

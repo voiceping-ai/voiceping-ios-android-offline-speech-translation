@@ -42,7 +42,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterPostNotification(
             center,
-            CFNotificationName("com.voiceping.translate.broadcastStarted" as CFString),
+            CFNotificationName(DarwinNotifications.broadcastStarted),
             nil, nil, true
         )
         NSLog("[SampleHandler] Posted broadcastStarted notification")
@@ -70,7 +70,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterPostNotification(
             center,
-            CFNotificationName("com.voiceping.translate.broadcastStopped" as CFString),
+            CFNotificationName(DarwinNotifications.broadcastStopped),
             nil, nil, true
         )
     }
@@ -96,7 +96,7 @@ class SampleHandler: RPBroadcastSampleHandler {
                     ))
                 }
             },
-            "com.voiceping.translate.stopBroadcast" as CFString,
+            DarwinNotifications.stopBroadcast.rawValue,
             nil,
             .deliverImmediately
         )
@@ -259,7 +259,7 @@ class SampleHandler: RPBroadcastSampleHandler {
             let center = CFNotificationCenterGetDarwinNotifyCenter()
             CFNotificationCenterPostNotification(
                 center,
-                CFNotificationName("com.voiceping.translate.audioReady" as CFString),
+                CFNotificationName(DarwinNotifications.audioReady),
                 nil, nil, true
             )
 

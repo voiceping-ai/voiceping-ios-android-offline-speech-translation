@@ -10,6 +10,7 @@ import com.voiceping.offlinetranscription.data.TranscriptionEntity
 import com.voiceping.offlinetranscription.model.AudioInputMode
 import com.voiceping.offlinetranscription.model.ModelInfo
 import com.voiceping.offlinetranscription.model.TranslationProvider
+import com.voiceping.offlinetranscription.service.AudioConstants
 import com.voiceping.offlinetranscription.service.WhisperEngine
 import com.voiceping.offlinetranscription.util.WavWriter
 import kotlinx.coroutines.Dispatchers
@@ -152,7 +153,7 @@ class TranscriptionViewModel(
                         WavWriter.write(samples, outputFile = wavFile)
                     }
                     audioRelPath = "sessions/${entity.id}/audio.wav"
-                    Log.i("TranscriptionVM", "Saved audio WAV: ${wavFile.length()} bytes (${samples.size} samples, ${"%.1f".format(samples.size / 16000.0)}s)")
+                    Log.i("TranscriptionVM", "Saved audio WAV: ${wavFile.length()} bytes (${samples.size} samples, ${"%.1f".format(samples.size / AudioConstants.SAMPLE_RATE.toDouble())}s)")
                 } catch (e: Exception) {
                     Log.w("TranscriptionVM", "Failed to write audio WAV", e)
                 }

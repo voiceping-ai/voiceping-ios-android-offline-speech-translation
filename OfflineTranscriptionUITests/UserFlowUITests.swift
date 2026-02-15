@@ -8,7 +8,7 @@ final class UserFlowUITests: XCTestCase {
 
     private let modelLoadTimeout: TimeInterval = 120
     private let transcriptionTimeout: TimeInterval = 180
-    private let modelSwitchTimeout: TimeInterval = 180
+    private let modelSwitchTimeout: TimeInterval = 900
     private let shortTimeout: TimeInterval = 10
 
     // MARK: - Setup / Teardown

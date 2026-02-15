@@ -2,6 +2,9 @@ import XCTest
 @testable import OfflineTranscription
 
 /// Stress tests: rapid start/stop, many iterations, large segment counts, memory pressure.
+///
+/// NOTE: The translation project disables eager segment confirmation.
+/// All segments go to `unconfirmedSegments`; `confirmedSegments` stays empty.
 @MainActor
 final class StressTests: XCTestCase {
 
@@ -11,7 +14,6 @@ final class StressTests: XCTestCase {
         super.setUp()
         UserDefaults.standard.removeObject(forKey: "selectedModelVariant")
         service = WhisperService()
-        service.enableEagerMode = true
     }
 
     override func tearDown() {
@@ -66,7 +68,8 @@ final class StressTests: XCTestCase {
 
         let total = service.confirmedSegments.count + service.unconfirmedSegments.count
         XCTAssertGreaterThan(total, 0)
-        XCTAssertGreaterThan(service.confirmedSegments.count, 0)
+        // No eager confirmation: last feed had 50 segments, all in unconfirmed
+        XCTAssertEqual(service.unconfirmedSegments.count, 50)
         XCTAssertFalse(service.fullTranscriptionText.isEmpty)
     }
 
@@ -77,10 +80,9 @@ final class StressTests: XCTestCase {
             service.testFeedResult(result(segs))
         }
 
-        // Every 2 iterations confirms 2 segments (confirm → flush → refill cycle).
-        // 100 iterations = 50 confirm cycles × 2 segments = 100 confirmed.
-        XCTAssertEqual(service.confirmedSegments.count, 100)
-        XCTAssertEqual(service.unconfirmedSegments.count, 0)
+        // No eager confirmation: all go to unconfirmed, last feed replaces previous
+        XCTAssertEqual(service.confirmedSegments.count, 0)
+        XCTAssertEqual(service.unconfirmedSegments.count, 2)
     }
 
     // MARK: - Large Segment Counts
@@ -98,8 +100,9 @@ final class StressTests: XCTestCase {
         segs2.append(seg(" extra", 200, 200.5))
         service.testFeedResult(result(segs2))
 
-        XCTAssertEqual(service.confirmedSegments.count, 200)
-        XCTAssertEqual(service.unconfirmedSegments.count, 1)
+        // No eager confirmation: all 201 in unconfirmed
+        XCTAssertEqual(service.confirmedSegments.count, 0)
+        XCTAssertEqual(service.unconfirmedSegments.count, 201)
     }
 
     // MARK: - Alternating Content
@@ -112,7 +115,7 @@ final class StressTests: XCTestCase {
             service.testFeedResult(result(i % 2 == 0 ? a : b))
         }
 
-        // Alternating never matches previous, so nothing should be confirmed.
+        // Last feed was Beta (i=19), all in unconfirmed
         XCTAssertEqual(service.confirmedSegments.count, 0)
         XCTAssertEqual(service.unconfirmedSegments.count, 1)
     }
@@ -127,9 +130,9 @@ final class StressTests: XCTestCase {
         service.testFeedResult(result(segs))
         service.testFeedResult(result(segs))
 
-        // After empty result, prevUnconfirmed is empty, so next result
-        // goes to unconfirmed. Then matching on the 4th iteration confirms.
-        XCTAssertEqual(service.confirmedSegments.count, 1)
+        // No eager confirmation: last feed has 1 segment in unconfirmed
+        XCTAssertEqual(service.confirmedSegments.count, 0)
+        XCTAssertEqual(service.unconfirmedSegments.count, 1)
     }
 
     // MARK: - Session Clear Mid-Stream
@@ -140,7 +143,7 @@ final class StressTests: XCTestCase {
         let s2 = [seg(" First", 0, 1), seg(" session", 1, 2)]
         service.testFeedResult(result(s1))
         service.testFeedResult(result(s2))
-        XCTAssertGreaterThan(service.confirmedSegments.count, 0)
+        XCTAssertEqual(service.unconfirmedSegments.count, 2)
 
         // Clear
         service.clearTranscription()
@@ -155,22 +158,26 @@ final class StressTests: XCTestCase {
         XCTAssertTrue(service.fullTranscriptionText.contains("New"))
     }
 
-    // MARK: - Confirmed Text Accumulation
+    // MARK: - Hypothesis Text Accumulation
 
-    func testConfirmedTextAccumulatesCorrectly() {
+    func testHypothesisReplacesOnEachFeed() {
         service.testFeedResult(result([seg(" A", 0, 1)]))
+        XCTAssertTrue(service.hypothesisText.contains("A"))
+
         service.testFeedResult(result([seg(" A", 0, 1), seg(" B", 1, 2)]))
-        // "A" confirmed
-        XCTAssertTrue(service.confirmedText.contains("A"))
+        XCTAssertTrue(service.hypothesisText.contains("A"))
+        XCTAssertTrue(service.hypothesisText.contains("B"))
 
         service.testFeedResult(result([seg(" B", 1, 2), seg(" C", 2, 3)]))
-        // "B" confirmed
-        XCTAssertTrue(service.confirmedText.contains("B"))
+        XCTAssertTrue(service.hypothesisText.contains("B"))
+        XCTAssertTrue(service.hypothesisText.contains("C"))
+        XCTAssertFalse(service.hypothesisText.contains("A"))
 
         service.testFeedResult(result([seg(" C", 2, 3), seg(" D", 3, 4)]))
-        // "C" confirmed
-        XCTAssertTrue(service.confirmedText.contains("C"))
+        XCTAssertTrue(service.hypothesisText.contains("C"))
+        XCTAssertTrue(service.hypothesisText.contains("D"))
 
-        XCTAssertEqual(service.confirmedSegments.count, 3)
+        // No eager confirmation
+        XCTAssertEqual(service.confirmedSegments.count, 0)
     }
 }

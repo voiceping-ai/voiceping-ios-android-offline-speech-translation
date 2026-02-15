@@ -23,7 +23,7 @@ This repository currently ships a focused model set per platform.
 
 ### iOS app (`OfflineTranscription`)
 
-- ASR models: `SenseVoice Small` and `Apple Speech`.
+- ASR models: `SenseVoice Small`, `Parakeet TDT 0.6B`, and `Apple Speech`.
 - Audio source switching:
 - `Voice` (microphone)
 - `System` (ReplayKit Broadcast Upload Extension)
@@ -35,7 +35,7 @@ This repository currently ships a focused model set per platform.
 
 ### Android app (`VoicePingIOSAndroidOfflineSpeechTranslationAndroid`)
 
-- ASR models: `SenseVoice Small`, `Android Speech (Offline)`, `Android Speech (Online)`.
+- ASR models: `SenseVoice Small`, `Parakeet TDT 0.6B`, `Android Speech (Offline)`, `Android Speech (Online)`.
 - Audio source switching:
 - `Voice` (microphone)
 - `System` (MediaProjection playback capture)
@@ -53,14 +53,16 @@ This repository currently ships a focused model set per platform.
 
 | Model ID | Engine | Languages |
 |---|---|---|
-| `sensevoice-small` | sherpa-onnx offline | `zh/en/ja/ko/yue` |
-| `apple-speech` | SFSpeechRecognizer | `50+ languages` |
+| [`sensevoice-small`](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) | sherpa-onnx offline | `zh/en/ja/ko/yue` |
+| [`parakeet-tdt-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | sherpa-onnx offline (transducer) | `25 European languages` |
+| [`apple-speech`](https://developer.apple.com/documentation/speech/sfspeechrecognizer) | SFSpeechRecognizer | `50+ languages` |
 
 ### Android (`.../model/ModelInfo.kt`)
 
 | Model ID | Engine | Languages |
 |---|---|---|
-| `sensevoice-small` | sherpa-onnx offline | `zh/en/ja/ko/yue` |
+| [`sensevoice-small`](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) | sherpa-onnx offline | `zh/en/ja/ko/yue` |
+| [`parakeet-tdt-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | sherpa-onnx offline (transducer) | `25 European languages` |
 | `android-speech-offline` | Android SpeechRecognizer (on-device, API 31+) | `System languages` |
 | `android-speech-online` | Android SpeechRecognizer (standard recognizer) | `System languages` |
 
@@ -218,3 +220,55 @@ scripts/android-userflow-test.sh
 ## License
 
 Apache License 2.0. See `LICENSE`.
+
+<!-- BENCHMARK_RESULTS_START -->
+### Inference Token Speed Benchmarks
+
+Measured from E2E `result.json` files using a longer English fixture.
+
+Fixture: `artifacts/benchmarks/long_en_eval.wav` (30.00s, 16kHz mono WAV)
+
+#### Evaluation Method
+
+- Per-model E2E runs with the same English fixture on each platform.
+- `duration_sec = duration_ms / 1000` from each model `result.json`.
+- `Words` is computed from transcript words: `[A-Za-z0-9']+`.
+- `tok/s` uses `tokens_per_second` from `result.json` when present; otherwise `Words / duration_sec`.
+- `RTF = duration_sec / audio_duration_sec`.
+
+#### iOS Graph
+
+![iOS tokens/sec](artifacts/benchmarks/ios_tokens_per_second.svg)
+
+#### iOS Results
+
+| Model | Engine | Words | Inference (ms) | Tok/s | RTF | Result |
+|---|---|---:|---:|---:|---:|---|
+| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 2458 | 23.59 | 0.08 | PASS |
+| `apple-speech` | - | 0 | n/a | n/a | n/a | SKIP |
+| `parakeet-tdt-v3` | - | 0 | n/a | n/a | n/a | SKIP |
+
+#### Android Graph
+
+![Android tokens/sec](artifacts/benchmarks/android_tokens_per_second.svg)
+
+#### Android Results
+
+| Model | Engine | Words | Inference (ms) | Tok/s | RTF | Result |
+|---|---|---:|---:|---:|---:|---|
+| `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 1725 | 33.63 | 0.06 | PASS |
+| `parakeet-tdt-v3` | sherpa-onnx offline (ONNX Runtime) | 58 | 2928 | 19.81 | 0.10 | PASS |
+| `android-speech-offline` | - | 0 | n/a | n/a | n/a | SKIP |
+| `android-speech-online` | - | 0 | n/a | n/a | n/a | SKIP |
+
+#### Reproduce
+
+1. `rm -rf artifacts/e2e/ios/* artifacts/e2e/android/*`
+2. `TARGET_SECONDS=30 scripts/prepare-long-eval-audio.sh`
+3. `EVAL_WAV_PATH=artifacts/benchmarks/long_en_eval.wav scripts/ios-e2e-test.sh`
+4. `INSTRUMENT_TIMEOUT_SEC=300 EVAL_WAV_PATH=artifacts/benchmarks/long_en_eval.wav scripts/android-e2e-test.sh`
+5. `python3 scripts/generate-inference-report.py --audio artifacts/benchmarks/long_en_eval.wav --update-readme`
+
+One-command runner: `TARGET_SECONDS=30 scripts/run-inference-benchmarks.sh`
+
+<!-- BENCHMARK_RESULTS_END -->

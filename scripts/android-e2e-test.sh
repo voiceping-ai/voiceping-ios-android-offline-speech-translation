@@ -36,14 +36,14 @@ fi
 
 ALL_MODELS=(
     "sensevoice-small"
-    "parakeet-tdt-0.6b-v2-int8"
+    "parakeet-tdt-v3"
 )
 
 # Map model-id to test method name
 typeset -A TEST_METHODS
 TEST_METHODS=(
     sensevoice-small test_sensevoiceSmall
-    parakeet-tdt-0.6b-v2-int8 test_parakeetTdtV3
+    parakeet-tdt-v3 test_parakeetTdtV3
 )
 
 # Use provided models or all
@@ -91,7 +91,7 @@ SKIP_COUNT=0
 instrument_timeout_for_model() {
     local model_id="$1"
     case "$model_id" in
-        parakeet-tdt-0.6b-v2-int8) echo 1800 ;;
+        parakeet-tdt-v3) echo 1800 ;;
         *) echo "$INSTRUMENT_TIMEOUT_SEC" ;;
     esac
 }

@@ -29,9 +29,9 @@ import kotlin.coroutines.coroutineContext
 class AudioRecorder(private val context: Context) {
 
     companion object {
-        const val SAMPLE_RATE = 16000
+        const val SAMPLE_RATE = AudioConstants.SAMPLE_RATE
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
-        private const val CHUNK_SIZE = 1600 // 100ms at 16kHz
+        private const val CHUNK_SIZE = AudioConstants.SAMPLE_RATE / 10 // 100ms at 16kHz
     }
 
     private enum class RecorderFormat(val audioEncoding: Int, val bytesPerSample: Int) {
@@ -111,7 +111,7 @@ class AudioRecorder(private val context: Context) {
         get() = synchronized(audioBuffer) { (droppedSampleCount + audioBuffer.size).toDouble() / SAMPLE_RATE }
 
     val maxRecentEnergy: Float
-        get() = synchronized(energyHistory) { energyHistory.takeLast(30).maxOrNull() ?: 0f }
+        get() = synchronized(energyHistory) { energyHistory.takeLast(AudioConstants.RECENT_ENERGY_WINDOW).maxOrNull() ?: 0f }
 
     /** True if early samples were trimmed during recording (audio WAV will be incomplete). */
     val hasDroppedSamples: Boolean
@@ -257,7 +257,7 @@ class AudioRecorder(private val context: Context) {
             val rms = sqrt(sumSquares / (end - offset)).toFloat()
             synchronized(energyHistory) {
                 energyHistory.add(rms)
-                if (energyHistory.size > 500) energyHistory.removeAt(0)
+                if (energyHistory.size > AudioConstants.MAX_ENERGY_HISTORY_SIZE) energyHistory.removeAt(0)
             }
         }
     }
@@ -413,7 +413,7 @@ class AudioRecorder(private val context: Context) {
         while (coroutineContext.isActive && isRecording) {
             val read = audioRecord?.read(chunk, 0, CHUNK_SIZE, AudioRecord.READ_BLOCKING) ?: -1
             if (read > 0) {
-                appendChunkAndEnergy(read) { index -> chunk[index] / 32768.0f }
+                appendChunkAndEnergy(read) { index -> chunk[index] / AudioConstants.PCM_16BIT_MAX }
             }
         }
     }
@@ -424,28 +424,27 @@ class AudioRecorder(private val context: Context) {
     ) {
         if (readCount <= 0) return
 
-        val normalized = FloatArray(readCount)
+        // First pass: find peak for auto-gain calculation
         var peak = 0f
         for (i in 0 until readCount) {
-            val raw = sampleAt(i).coerceIn(-1f, 1f)
-            normalized[i] = raw
-            peak = max(peak, abs(raw))
+            peak = max(peak, abs(sampleAt(i).coerceIn(-1f, 1f)))
         }
 
-        // On emulators host mic can be extremely quiet; apply bounded auto gain.
+        // Apply bounded auto gain for quiet microphones.
         val gain = when {
             peak <= 0f -> 1f
-            peak < 0.002f -> min(64f, 0.20f / peak)
-            peak < 0.01f -> min(24f, 0.20f / peak)
-            peak < 0.03f -> min(8f, 0.20f / peak)
+            peak < AudioConstants.GAIN_THRESHOLD_VERY_QUIET -> min(AudioConstants.GAIN_MAX_VERY_QUIET, AudioConstants.GAIN_TARGET_LEVEL / peak)
+            peak < AudioConstants.GAIN_THRESHOLD_QUIET -> min(AudioConstants.GAIN_MAX_QUIET, AudioConstants.GAIN_TARGET_LEVEL / peak)
+            peak < AudioConstants.GAIN_THRESHOLD_LOW -> min(AudioConstants.GAIN_MAX_LOW, AudioConstants.GAIN_TARGET_LEVEL / peak)
             else -> 1f
         }
 
+        // Second pass: apply gain and append directly (no intermediate array)
         var sumSquares = 0.0
         synchronized(audioBuffer) {
             audioBuffer.ensureCapacity(audioBuffer.size + readCount)
             for (i in 0 until readCount) {
-                val sample = (normalized[i] * gain).coerceIn(-1f, 1f)
+                val sample = (sampleAt(i).coerceIn(-1f, 1f) * gain).coerceIn(-1f, 1f)
                 sumSquares += sample * sample
                 audioBuffer.add(sample)
             }
@@ -454,7 +453,7 @@ class AudioRecorder(private val context: Context) {
         val rms = sqrt(sumSquares / readCount).toFloat()
         synchronized(energyHistory) {
             energyHistory.add(rms)
-            if (energyHistory.size > 500) {
+            if (energyHistory.size > AudioConstants.MAX_ENERGY_HISTORY_SIZE) {
                 energyHistory.removeAt(0)
             }
         }

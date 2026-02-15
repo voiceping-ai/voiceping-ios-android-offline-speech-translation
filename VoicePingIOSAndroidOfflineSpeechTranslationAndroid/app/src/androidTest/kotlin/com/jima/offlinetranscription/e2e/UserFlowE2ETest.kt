@@ -110,7 +110,7 @@ class UserFlowE2ETest {
         // Screenshot 01: during recording
         takeScreenshot(dir, "01_recording.png")
 
-        // Stop recording (may auto-stop due to silence on emulator)
+        // Stop recording (may auto-stop due to silence)
         val stopButton = device.findObject(By.desc("Stop recording"))
         if (stopButton != null) {
             stopButton.click()
@@ -119,7 +119,7 @@ class UserFlowE2ETest {
             Log.w(TAG, "[test_02] Stop button not found — recording may have auto-stopped")
         }
 
-        // Wait for engine to process; on emulator mic may produce no useful audio
+        // Wait for engine to process
         Thread.sleep(5_000)
 
         // Screenshot 02: transcript result
@@ -128,7 +128,7 @@ class UserFlowE2ETest {
         // Verify we return to idle or force-clear if stuck
         val micAgain = waitForStartRecordingButton(timeoutMs = 15_000)
         if (micAgain == null) {
-            // Engine may be stuck processing emulator silence — force clear
+            // Engine may be stuck — force clear
             Log.w(TAG, "[test_02] Not idle after recording — forcing clear")
             try {
                 val app = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext

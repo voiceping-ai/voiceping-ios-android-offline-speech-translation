@@ -1,19 +1,28 @@
 #!/bin/zsh
 # iOS UI Flow Tests Runner
 # Runs all 10 user flow tests, collects screenshots, generates report.
-# Usage: ./scripts/ios-ui-flow-tests.sh [test_name ...]
+# Usage: IOS_DEVICE_ID=<udid> ./scripts/ios-ui-flow-tests.sh [test_name ...]
+# Requires IOS_DEVICE_ID environment variable (real device UDID).
 
 set -uo pipefail
 
-SIMULATOR_ID="578CBE53-DFDD-4BC5-874C-5F96A59A5C64"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+IOS_DEVICE_ID="${IOS_DEVICE_ID:-}"
 EVIDENCE_DIR="${EVIDENCE_DIR:-$PROJECT_DIR/artifacts/ui-flow-tests/ios}"
 WAV_SOURCE="${EVAL_WAV_PATH:-$PROJECT_DIR/artifacts/benchmarks/long_en_eval.wav}"
 SCREENSHOT_DIR="/tmp/ui_flow_evidence"
 SCHEME="OfflineTranscription"
 TEST_CLASS="OfflineTranscriptionUITests/UserFlowUITests"
 BUNDLE_ID="com.voiceping.offline-transcription"
+
+if [ -z "$IOS_DEVICE_ID" ]; then
+    echo "ERROR: IOS_DEVICE_ID environment variable is required."
+    echo "Usage: IOS_DEVICE_ID=<device-udid> $0 [test_name ...]"
+    echo ""
+    echo "Find your device UDID with: xcrun devicectl list devices"
+    exit 1
+fi
 
 ALL_TESTS=(
     "test_01_appLaunchAndModelLoad"
@@ -36,6 +45,7 @@ else
 fi
 
 echo "=== iOS UI Flow Test Suite ==="
+echo "Device: $IOS_DEVICE_ID"
 echo "Tests to run: ${TESTS[*]}"
 echo "Evidence directory: $EVIDENCE_DIR"
 echo ""
@@ -53,15 +63,6 @@ else
     echo "WARNING: Test WAV not found at $WAV_SOURCE"
 fi
 
-# Boot simulator if needed
-xcrun simctl boot "$SIMULATOR_ID" 2>/dev/null || true
-sleep 2
-
-# Grant mic permission
-xcrun simctl privacy "$SIMULATOR_ID" grant microphone "$BUNDLE_ID" 2>/dev/null || true
-echo "Microphone permission granted."
-echo ""
-
 PASS_COUNT=0
 FAIL_COUNT=0
 typeset -A RESULTS
@@ -72,12 +73,13 @@ for TEST_NAME in "${TESTS[@]}"; do
     rm -rf "$TEST_DIR"
     mkdir -p "$TEST_DIR"
 
-    # Run individual XCUITest
+    # Run individual XCUITest on real device
     RESULT=$(xcodebuild test \
         -project "$PROJECT_DIR/VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj" \
         -scheme "$SCHEME" \
-        -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+        -destination "id=$IOS_DEVICE_ID" \
         -only-testing:"$TEST_CLASS/$TEST_NAME" \
+        -allowProvisioningUpdates \
         2>&1 || true)
 
     # Check pass/fail

@@ -31,7 +31,7 @@ final class ModelDownloader: NSObject, @unchecked Sendable {
     private static let downloadSessionConfiguration: URLSessionConfiguration = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 60
-        config.timeoutIntervalForResource = 15 * 60
+        config.timeoutIntervalForResource = 45 * 60
         config.waitsForConnectivity = true
         return config
     }()

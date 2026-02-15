@@ -147,7 +147,7 @@ final class ModelLifecycleTests: XCTestCase {
     func testConfigurationDefaultValues() {
         let s = WhisperService()
         XCTAssertTrue(s.useVAD)
-        XCTAssertEqual(s.silenceThreshold, 0.3, accuracy: 0.01)
+        XCTAssertEqual(s.silenceThreshold, 0.0015, accuracy: 0.0001)
         XCTAssertEqual(s.realtimeDelayInterval, 1.0, accuracy: 0.01)
         XCTAssertTrue(s.enableTimestamps)
         XCTAssertTrue(s.enableEagerMode)

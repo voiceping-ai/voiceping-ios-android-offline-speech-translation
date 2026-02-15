@@ -165,15 +165,17 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
     val scrollState = rememberScrollState()
     val bottomPanelScrollState = rememberScrollState()
 
-    // Elapsed recording timer
+    // Elapsed recording timer — based on wall clock, not accumulated delays
     var elapsedSeconds by remember { mutableStateOf(0) }
     LaunchedEffect(isRecording) {
         if (isRecording) {
-            elapsedSeconds = 0
+            val startTime = System.currentTimeMillis()
             while (true) {
+                elapsedSeconds = ((System.currentTimeMillis() - startTime) / 1000).toInt()
                 kotlinx.coroutines.delay(1000)
-                elapsedSeconds++
             }
+        } else {
+            elapsedSeconds = 0
         }
     }
 

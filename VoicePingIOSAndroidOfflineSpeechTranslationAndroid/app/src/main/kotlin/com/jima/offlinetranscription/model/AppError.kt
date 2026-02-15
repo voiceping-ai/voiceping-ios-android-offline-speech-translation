@@ -7,7 +7,7 @@ sealed class AppError(val message: String) {
     class SystemAudioCapturePermissionDenied :
         AppError("System audio capture is not enabled. Tap 'Enable System Capture' and accept the prompt.")
     class NoMicrophoneSignal : AppError(
-        "No microphone signal detected. In Android Emulator, enable host mic in Extended Controls > Microphone."
+        "No microphone signal detected. Check that the microphone is not muted or blocked."
     )
     class NetworkUnavailable : AppError("No internet connection. Connect to download the model.")
     class ModelDownloadFailed(cause: Throwable) : AppError("Failed to download the model: ${cause.localizedMessage}")

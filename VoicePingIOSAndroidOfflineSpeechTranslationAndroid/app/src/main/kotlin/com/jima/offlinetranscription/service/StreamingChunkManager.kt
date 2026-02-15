@@ -1,5 +1,7 @@
 package com.voiceping.offlinetranscription.service
 
+import com.voiceping.offlinetranscription.util.TextNormalizationUtils
+
 /**
  * Manages chunk-based windowing for streaming ASR inference.
  *
@@ -12,7 +14,7 @@ package com.voiceping.offlinetranscription.service
  */
 class StreamingChunkManager(
     private val chunkSeconds: Float = CHUNK_SECONDS,
-    private val sampleRate: Int = 16000,
+    private val sampleRate: Int = AudioConstants.SAMPLE_RATE,
     private val minNewAudioSeconds: Float = MIN_NEW_AUDIO_SECONDS
 ) {
     var completedChunksText: String = ""
@@ -37,12 +39,6 @@ class StreamingChunkManager(
     companion object {
         const val CHUNK_SECONDS = 15.0f
         const val MIN_NEW_AUDIO_SECONDS = 1.0f
-        private val WHITESPACE_REGEX = "\\s+".toRegex()
-        private const val CJK_CHAR_CLASS = "[\\p{IsHan}\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}々〆ヵヶー]"
-        private val CJK_INNER_SPACE_REGEX = "($CJK_CHAR_CLASS)\\s+($CJK_CHAR_CLASS)".toRegex()
-        private val SPACE_BEFORE_CJK_PUNCT_REGEX = "\\s+([、。！？：；）」』】〉》])".toRegex()
-        private val SPACE_AFTER_CJK_OPEN_PUNCT_REGEX = "([（「『【〈《])\\s+".toRegex()
-        private val SPACE_AFTER_CJK_END_PUNCT_REGEX = "([、。！？：；])\\s+($CJK_CHAR_CLASS)".toRegex()
     }
 
     /**
@@ -226,23 +222,7 @@ class StreamingChunkManager(
         return parts.filter { it.isNotBlank() }.joinToString(" ")
     }
 
-    fun normalizeText(text: String): String {
-        val collapsed = text.replace(WHITESPACE_REGEX, " ").trim()
-        return normalizeCjkSpacing(collapsed)
-    }
-
-    private fun normalizeCjkSpacing(text: String): String {
-        var current = text
-        while (true) {
-            var next = current
-            next = CJK_INNER_SPACE_REGEX.replace(next, "$1$2")
-            next = SPACE_BEFORE_CJK_PUNCT_REGEX.replace(next, "$1")
-            next = SPACE_AFTER_CJK_OPEN_PUNCT_REGEX.replace(next, "$1")
-            next = SPACE_AFTER_CJK_END_PUNCT_REGEX.replace(next, "$1$2")
-            if (next == current) return next
-            current = next
-        }
-    }
+    fun normalizeText(text: String): String = TextNormalizationUtils.normalizeText(text)
 
     data class SliceInfo(
         val startSample: Int,

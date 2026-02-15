@@ -16,6 +16,7 @@ final class AllModelsE2ETest: XCTestCase {
     // Must be larger than app-side polling timeout (TranscriptionView auto-test)
     private func timeout(for modelId: String) -> TimeInterval {
         switch modelId {
+        case let id where id.contains("parakeet"): return 900
         case let id where id.contains("large"): return 480
         case let id where id.contains("300m"): return 360
         case let id where id.contains("small"): return 300

@@ -6,7 +6,9 @@ import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.voiceping.offlinetranscription.model.SherpaModelType
+import com.voiceping.offlinetranscription.util.TextNormalizationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -14,7 +16,8 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * ASR engine backed by sherpa-onnx for SenseVoice offline recognition.
+ * ASR engine backed by sherpa-onnx for offline recognition.
+ * Supports SenseVoice and Parakeet TDT (transducer) models.
  * Expects a model directory containing the required ONNX files + tokens.txt.
  *
  * All access to [recognizer] is guarded by [lock] so that release()
@@ -78,12 +81,7 @@ class SherpaOnnxEngine(
 
                     val text = result.text.trim()
                     val timestamps = result.timestamps
-                    // SenseVoice returns language codes in "<|en|>" format — normalize
-                    // to plain BCP-47 (e.g. "en"). Same fix as iOS SherpaOnnxOfflineEngine.
-                    val lang = result.lang.takeIf { it.isNotBlank() }
-                        ?.replace("<|", "")?.replace("|>", "")
-                        ?.trim()?.lowercase()
-                        ?.takeIf { it.isNotBlank() }
+                    val lang = TextNormalizationUtils.normalizeLanguageCode(result.lang)
 
                     val decodeElapsedSec = (System.nanoTime() - decodeStartNs) / 1_000_000_000.0
                     Log.i(
@@ -110,17 +108,30 @@ class SherpaOnnxEngine(
     private fun buildConfig(modelDir: String, threads: Int, provider: String): OfflineRecognizerConfig {
         val tokensPath = File(modelDir, "tokens.txt").absolutePath
 
-        val modelConfig = OfflineModelConfig(
-            senseVoice = OfflineSenseVoiceModelConfig(
-                model = findFile(modelDir, "model"),
-                language = "auto",
-                useInverseTextNormalization = true,
-            ),
-            tokens = tokensPath,
-            numThreads = threads,
-            debug = false,
-            provider = provider,
-        )
+        val modelConfig = when (modelType) {
+            SherpaModelType.SENSE_VOICE -> OfflineModelConfig(
+                senseVoice = OfflineSenseVoiceModelConfig(
+                    model = findFile(modelDir, "model"),
+                    language = "auto",
+                    useInverseTextNormalization = true,
+                ),
+                tokens = tokensPath,
+                numThreads = threads,
+                debug = false,
+                provider = provider,
+            )
+            SherpaModelType.PARAKEET_TRANSDUCER -> OfflineModelConfig(
+                transducer = OfflineTransducerModelConfig(
+                    encoder = findFile(modelDir, "encoder"),
+                    decoder = findFile(modelDir, "decoder"),
+                    joiner = findFile(modelDir, "joiner"),
+                ),
+                tokens = tokensPath,
+                numThreads = threads,
+                debug = false,
+                provider = provider,
+            )
+        }
 
         return OfflineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80),

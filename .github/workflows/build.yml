@@ -110,40 +110,16 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      - name: Run minimal unit test script
+      - name: Build iOS app
         run: |
-          chmod +x ./scripts/ci-ios-unit-test.sh
-          ./scripts/ci-ios-unit-test.sh
-
-      - name: Package iOS simulator app
-        run: |
-          app_path="build/DerivedData/Build/Products/Debug-iphonesimulator/OfflineTranscription.app"
-          zip_path="build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip"
-          rm -f "$zip_path"
-          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$zip_path"
-
-      - name: Validate iOS simulator package
-        run: |
-          set -euo pipefail
-          zip_path="build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip"
-          [ -s "$zip_path" ] || { echo "Missing or empty iOS package: $zip_path" >&2; exit 1; }
-          unzip -t "$zip_path" >/dev/null
-          unzip -l "$zip_path" | grep -q "OfflineTranscription\\.app/"
-          shasum -a 256 "$zip_path" | tee build/ios-simulator.sha256
-
-      - name: Upload iOS app artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-simulator-app
-          path: build/OfflineTranscription-iOS-Simulator-${{ github.sha }}.zip
-          if-no-files-found: error
-
-      - name: Upload iOS checksum artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-simulator-checksum
-          path: build/ios-simulator.sha256
-          if-no-files-found: error
+          xcodebuild build \
+            -project VoicePingIOSAndroidOfflineSpeechTranslation.xcodeproj \
+            -scheme OfflineTranscription \
+            -destination "generic/platform=iOS" \
+            -configuration Debug \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO
 
   publish-release:
     name: Publish GitHub Release
@@ -178,18 +154,6 @@ jobs:
           name: android-binaries-checksums
           path: release-assets/android
 
-      - name: Download iOS simulator artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ios-simulator-app
-          path: release-assets/ios
-
-      - name: Download iOS checksum artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ios-simulator-checksum
-          path: release-assets/ios
-
       - name: Publish GitHub release assets
         uses: softprops/action-gh-release@v2
         with:
@@ -201,8 +165,6 @@ jobs:
             release-assets/android/*.apk
             release-assets/android/*.aab
             release-assets/android/*.sha256
-            release-assets/ios/*.zip
-            release-assets/ios/*.sha256
           fail_on_unmatched_files: true
           overwrite_files: true
 

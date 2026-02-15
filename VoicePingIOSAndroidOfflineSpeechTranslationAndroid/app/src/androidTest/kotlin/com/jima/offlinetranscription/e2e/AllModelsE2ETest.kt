@@ -33,7 +33,6 @@ class AllModelsE2ETest {
     private lateinit var packageNameUnderTest: String
 
     // Per-model download+load+transcribe timeout (ms)
-    // whisper.cpp on emulator is very slow — whisper-small needs ~500s, large-turbo ~1800s
     private fun timeout(modelId: String): Long = when {
         modelId.contains("large") -> 1_800_000L
         modelId.contains("omnilingual") -> 600_000L
@@ -61,7 +60,7 @@ class AllModelsE2ETest {
     @Test fun test_moonshineTiny(): Unit = testModel("moonshine-tiny")
     @Test fun test_moonshineBase(): Unit = testModel("moonshine-base")
     @Test fun test_sensevoiceSmall(): Unit = testModel("sensevoice-small")
-    @Test fun test_parakeetTdtV3(): Unit = testModel("parakeet-tdt-0.6b-v2-int8")
+    @Test fun test_parakeetTdtV3(): Unit = testModel("parakeet-tdt-v3")
     @Test fun test_omnilingual300m(): Unit = testModel("omnilingual-300m")
     @Test fun test_zipformer20m(): Unit = testModel("zipformer-20m")
 
@@ -107,7 +106,6 @@ class AllModelsE2ETest {
         Log.i(TAG, "[$modelId] Screenshot 02 captured")
 
         // 5. Wait for result.json or E2E overlay to appear
-        // whisper.cpp on emulator is very slow — whisper-small needs ~600s for inference
         val evidenceTimeout = timeoutMs
         val startWait = System.currentTimeMillis()
         var resultExists = false

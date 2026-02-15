@@ -1,5 +1,6 @@
 package com.voiceping.offlinetranscription.util
 
+import com.voiceping.offlinetranscription.service.AudioConstants
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -16,7 +17,7 @@ object WavWriter {
     private const val NUM_CHANNELS = 1
     private const val CHUNK_SIZE = 4096
 
-    fun write(samples: FloatArray, sampleRate: Int = 16000, outputFile: File) {
+    fun write(samples: FloatArray, sampleRate: Int = AudioConstants.SAMPLE_RATE, outputFile: File) {
         val dataSize = samples.size * (BITS_PER_SAMPLE / 8) * NUM_CHANNELS
         val fileSize = HEADER_SIZE + dataSize
 

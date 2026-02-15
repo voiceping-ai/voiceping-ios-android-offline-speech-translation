@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-# CI smoke test for iOS: run a minimal XCTest suite on the latest available iOS simulator.
+# CI unit test runner for iOS: run the OfflineTranscription unit-test target.
+# Requires IOS_DESTINATION environment variable.
+# Example: IOS_DESTINATION="id=<device-udid>" ./scripts/ci-ios-unit-test.sh
 
 set -euo pipefail
 
@@ -12,53 +14,12 @@ SCHEME="${IOS_SCHEME:-OfflineTranscriptionCI}"
 E2E_BUILD_SCHEME="${IOS_E2E_SCHEME:-OfflineTranscriptionE2ECI}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-$PROJECT_DIR/build/DerivedData}"
 TEST_FILTER="${IOS_TEST_FILTER:-OfflineTranscriptionCITests/SessionStateCITests}"
+DESTINATION="${IOS_DESTINATION:-}"
 
-resolve_simulator_udid() {
-  python3 - <<'PY'
-import json
-import subprocess
-import sys
-
-def runtime_version(runtime: str):
-    marker = "SimRuntime.iOS-"
-    if marker not in runtime:
-        return (-1,)
-    suffix = runtime.split(marker, 1)[1]
-    try:
-        return tuple(int(p) for p in suffix.split("-"))
-    except ValueError:
-        return (-1,)
-
-raw = subprocess.check_output(
-    ["xcrun", "simctl", "list", "devices", "available", "-j"],
-    text=True,
-)
-devices = json.loads(raw).get("devices", {})
-for runtime in sorted(devices.keys(), key=runtime_version, reverse=True):
-    if "SimRuntime.iOS-" not in runtime:
-        continue
-
-    candidates = [
-        d for d in devices[runtime]
-        if d.get("isAvailable") and d.get("name", "").startswith("iPhone")
-    ]
-    if not candidates:
-        continue
-
-    # Prefer newer default devices when present.
-    candidates.sort(key=lambda d: (0 if "iPhone 16" in d["name"] else 1, d["name"]))
-    print(candidates[0]["udid"])
-    sys.exit(0)
-
-sys.exit(1)
-PY
-}
-
-if [ -n "${IOS_DESTINATION:-}" ]; then
-  DESTINATION="$IOS_DESTINATION"
-else
-  SIMULATOR_ID="$(resolve_simulator_udid)"
-  DESTINATION="platform=iOS Simulator,id=$SIMULATOR_ID"
+if [ -z "$DESTINATION" ]; then
+    echo "ERROR: IOS_DESTINATION environment variable is required."
+    echo "Usage: IOS_DESTINATION=\"id=<device-udid>\" $0"
+    exit 1
 fi
 
 set -o pipefail
@@ -68,6 +29,7 @@ xcodebuild build-for-testing \
   -destination "$DESTINATION" \
   -configuration Debug \
   -derivedDataPath "$DERIVED_DATA_PATH" \
+  -allowProvisioningUpdates \
   CODE_SIGNING_ALLOWED=NO
 
 xcodebuild test \
@@ -76,5 +38,6 @@ xcodebuild test \
   -destination "$DESTINATION" \
   -configuration Debug \
   -derivedDataPath "$DERIVED_DATA_PATH" \
+  -allowProvisioningUpdates \
   CODE_SIGNING_ALLOWED=NO \
   -only-testing:"$TEST_FILTER"

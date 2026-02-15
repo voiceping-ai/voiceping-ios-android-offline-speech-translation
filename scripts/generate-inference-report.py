@@ -25,35 +25,13 @@ from typing import Any
 
 IOS_MODELS = [
     "sensevoice-small",
-    "whisper-tiny",
-    "whisper-base",
-    "whisper-small",
-    "whisper-large-v3-turbo",
-    "whisper-large-v3-turbo-compressed",
-    "moonshine-tiny",
-    "moonshine-base",
-    "zipformer-20m",
-    "omnilingual-300m",
     "parakeet-tdt-v3",
-    "qwen3-asr-0.6b",
-    "qwen3-asr-0.6b-onnx",
     "apple-speech",
 ]
 
 ANDROID_MODELS = [
     "sensevoice-small",
-    "whisper-tiny",
-    "whisper-base",
-    "whisper-base-en",
-    "whisper-small",
-    "whisper-large-v3-turbo",
-    "moonshine-tiny",
-    "moonshine-base",
-    "omnilingual-300m",
-    "zipformer-20m",
-    "cactus-whisper-tiny",
-    "qwen3-asr-0.6b",
-    "qwen3-asr-0.6b-onnx",
+    "parakeet-tdt-v3",
     "android-speech-offline",
     "android-speech-online",
 ]

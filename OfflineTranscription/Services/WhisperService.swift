@@ -102,6 +102,9 @@ final class WhisperService {
     // Engine delegation
     private(set) var activeEngine: ASREngine?
 
+    /// Coordinates real-time transcription loops, VAD, and chunking.
+    private(set) var transcriptionCoordinator: TranscriptionCoordinator!
+
     /// System audio source for broadcast mode (receives audio from Broadcast Extension).
     private var systemAudioSource: SystemAudioSource?
 
@@ -117,7 +120,7 @@ final class WhisperService {
     }
 
     /// Audio samples for transcription — uses SystemAudioSource in broadcast mode.
-    private var effectiveAudioSamples: [Float] {
+    var effectiveAudioSamples: [Float] {
         if audioCaptureMode == .systemBroadcast, let source = systemAudioSource {
             return source.audioSamples
         }
@@ -125,7 +128,7 @@ final class WhisperService {
     }
 
     /// Energy levels for VAD / visualization — uses SystemAudioSource in broadcast mode.
-    private var effectiveRelativeEnergy: [Float] {
+    var effectiveRelativeEnergy: [Float] {
         if audioCaptureMode == .systemBroadcast, let source = systemAudioSource {
             return source.relativeEnergy
         }
@@ -133,22 +136,13 @@ final class WhisperService {
     }
 
     // Private
-    private var transcriptionTask: Task<Void, Never>?
-    private var lingeringTranscriptionTask: Task<Void, Never>?
-    private var lastBufferSize: Int = 0
-    private var lastConfirmedSegmentEndSeconds: Float = 0
-    private var prevUnconfirmedSegments: [ASRSegment] = []
-    private var consecutiveSilenceCount: Int = 0
-    private var hasCompletedFirstInference: Bool = false
-    /// EMA-smoothed inference time (seconds) for CPU-aware delay calculation.
-    private var movingAverageInferenceSeconds: Double = 0.0
-    /// Finalized chunk texts, each representing one completed transcription window.
-    private var completedChunksText: String = ""
     private var translationTask: Task<Void, Never>?
+    #if DEBUG
+    private var e2eTask: Task<Void, Never>?
+    #endif
     private var lastSpokenTranslatedConfirmed: String = ""
     /// Cache: last input text pair sent for translation (to skip redundant calls).
     private var lastTranslationInput: (confirmed: String, hypothesis: String)?
-    private var lastUIMeterUpdateTimestamp: CFAbsoluteTime = 0
     private let translationService = AppleTranslationService()
     private let ttsService = NativeTTSService()
 
@@ -171,67 +165,15 @@ final class WhisperService {
     private let systemMetrics = SystemMetrics()
     private var metricsTask: Task<Void, Never>?
     private let selectedModelKey = "selectedModelVariant"
-    private static let sampleRate: Float = 16000
-    private static let displayEnergyFrameLimit = 160
-    private static let uiMeterUpdateInterval: CFTimeInterval = 0.12
+    private static let sampleRate: Float = AudioConstants.sampleRateFloat
     private static let e2eTimestampFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
-    private static let inlineWhitespaceRegex: NSRegularExpression = {
-        // Collapse horizontal whitespace while preserving line breaks.
-        return try! NSRegularExpression(pattern: "[^\\S\\n]+")
-    }()
-
-    /// SenseVoice chunk duration: 5s for natural turn-taking.
-    private static let maxChunkSeconds: Float = 5.0
-
-    // MARK: - Adaptive Delay (CPU-aware, matches Android)
-    /// Initial inference gate: show first words quickly (matches Android's 0.35s).
-    private static let initialMinNewAudioSeconds: Float = 0.35
-    /// Base delay between inferences for sherpa-onnx offline after first decode.
-    private static let sherpaBaseDelaySeconds: Float = 0.7
-    /// Target inference duty cycle — inference should use at most this fraction of wall time.
-    private static let targetInferenceDutyCycle: Float = 0.24
-    /// Maximum CPU-protection delay cap.
-    private static let maxCpuProtectDelaySeconds: Float = 1.6
-    /// EMA smoothing factor for inference time tracking.
-    private static let inferenceEmaAlpha: Double = 0.20
-
-    /// Minimum RMS energy to submit audio for inference. Below this, the audio is
-    /// near-silence and SenseVoice tends to hallucinate ("I.", "Yeah.", "The.").
-    private static let minInferenceRMS: Float = 0.012
-
-    /// Bypass VAD for the first N seconds so initial speech is never dropped.
-    private static let initialVADBypassSeconds: Float = 1.0
-    /// Keep a pre-roll of audio when VAD says silence, so utterance onsets
-    /// that straddle VAD boundaries are not lost.
-    private static let vadPrerollSeconds: Float = 0.6
-
-    /// Cancel the active transcription task and keep a handle so we can await
-    /// full teardown before starting a new inference session.
-    private func cancelAndTrackTranscriptionTask() {
-        guard let task = transcriptionTask else { return }
-        task.cancel()
-        lingeringTranscriptionTask = task
-        transcriptionTask = nil
-    }
-
-    /// Wait for any previously cancelled transcription task to finish.
-    private func drainLingeringTranscriptionTask() async {
-        if let activeTask = transcriptionTask {
-            activeTask.cancel()
-            lingeringTranscriptionTask = activeTask
-            transcriptionTask = nil
-        }
-        if let lingering = lingeringTranscriptionTask {
-            _ = await lingering.result
-            lingeringTranscriptionTask = nil
-        }
-    }
 
     init() {
+        self.transcriptionCoordinator = TranscriptionCoordinator(service: self)
         if let saved = UserDefaults.standard.string(forKey: selectedModelKey),
            let model = ModelInfo.availableModels.first(where: { $0.variant == saved })
                     ?? ModelInfo.availableModels.first(where: { $0.id == saved })
@@ -268,7 +210,7 @@ final class WhisperService {
     private func registerBroadcastNotifications() {
         let center = CFNotificationCenterGetDarwinNotifyCenter()
 
-        let broadcastStartedName = "com.voiceping.translate.broadcastStarted" as CFString
+        let broadcastStartedName = DarwinNotifications.broadcastStarted
         CFNotificationCenterAddObserver(
             center,
             Unmanaged.passUnretained(self).toOpaque(),
@@ -284,7 +226,7 @@ final class WhisperService {
             .deliverImmediately
         )
 
-        let broadcastStoppedName = "com.voiceping.translate.broadcastStopped" as CFString
+        let broadcastStoppedName = DarwinNotifications.broadcastStopped
         CFNotificationCenterAddObserver(
             center,
             Unmanaged.passUnretained(self).toOpaque(),
@@ -384,7 +326,7 @@ final class WhisperService {
         switch type {
         case .began:
             if isRecording {
-                cancelAndTrackTranscriptionTask()
+                transcriptionCoordinator.cancelAndTrackTranscriptionTask()
                 isTranscribing = false
                 sessionState = .interrupted
             }
@@ -397,7 +339,7 @@ final class WhisperService {
                 if shouldResume, let engine = activeEngine {
                     Task {
                         do {
-                            await self.drainLingeringTranscriptionTask()
+                            await self.transcriptionCoordinator.drainLingeringTranscriptionTask()
                             if self.audioCaptureMode == .systemBroadcast {
                                 let source = SystemAudioSource()
                                 self.systemAudioSource = source
@@ -407,7 +349,7 @@ final class WhisperService {
                             }
                             isTranscribing = true
                             sessionState = .recording
-                            realtimeLoop()
+                            transcriptionCoordinator.startLoop()
                         } catch {
                             NSLog("[WhisperService] Failed to resume recording after interruption: \(error)")
                             stopRecording()
@@ -536,12 +478,12 @@ final class WhisperService {
             stopRecording()
         }
 
-        await drainLingeringTranscriptionTask()
+        await transcriptionCoordinator.drainLingeringTranscriptionTask()
 
         isRecording = false
         isTranscribing = false
         sessionState = .idle
-        cancelAndTrackTranscriptionTask()
+        transcriptionCoordinator.cancelAndTrackTranscriptionTask()
         translationTask?.cancel()
         translationTask = nil
 
@@ -561,7 +503,7 @@ final class WhisperService {
         guard sessionState == .idle else { return }
 
         sessionState = .starting
-        await drainLingeringTranscriptionTask()
+        await transcriptionCoordinator.drainLingeringTranscriptionTask()
 
         guard let engine = activeEngine, engine.modelState == .loaded else {
             sessionState = .idle
@@ -597,7 +539,7 @@ final class WhisperService {
         isTranscribing = true
         sessionState = .recording
 
-        realtimeLoop()
+        transcriptionCoordinator.startLoop()
     }
 
     func stopRecording() {
@@ -605,7 +547,7 @@ final class WhisperService {
             || sessionState == .starting else { return }
 
         sessionState = .stopping
-        cancelAndTrackTranscriptionTask()
+        transcriptionCoordinator.cancelAndTrackTranscriptionTask()
         translationTask?.cancel()
         translationTask = nil
 
@@ -620,7 +562,7 @@ final class WhisperService {
             let center = CFNotificationCenterGetDarwinNotifyCenter()
             CFNotificationCenterPostNotification(
                 center,
-                CFNotificationName("com.voiceping.translate.stopBroadcast" as CFString),
+                DarwinNotifications.stopBroadcast,
                 nil, nil, true
             )
         }
@@ -632,7 +574,7 @@ final class WhisperService {
 
         // Finalize any remaining hypothesis text as confirmed so it is
         // included when the user saves the session.
-        finalizeCurrentChunk()
+        transcriptionCoordinator.finalizeCurrentChunk()
         NSLog("[WhisperService] stopRecording: finalized text='\(confirmedText.prefix(80))' audio=\(currentAudioSamples.count) samples")
 
         isRecording = false
@@ -648,7 +590,7 @@ final class WhisperService {
             || isTranscribing else { return }
 
         sessionState = .stopping
-        cancelAndTrackTranscriptionTask()
+        transcriptionCoordinator.cancelAndTrackTranscriptionTask()
         systemAudioSource?.stop()
         systemAudioSource = nil
         activeEngine?.stopRecording()
@@ -672,7 +614,7 @@ final class WhisperService {
         NSLog("[WhisperService] Resuming recording after TTS playback")
 
         // Drain any lingering transcription task to avoid concurrent inference
-        await drainLingeringTranscriptionTask()
+        await transcriptionCoordinator.drainLingeringTranscriptionTask()
 
         // Re-check state after awaiting — user may have acted while we drained
         guard sessionState == .idle else {
@@ -681,18 +623,12 @@ final class WhisperService {
         }
 
         // Reset audio buffer tracking for fresh engine buffer
-        lastBufferSize = 0
-        consecutiveSilenceCount = 0
-        hasCompletedFirstInference = false
+        transcriptionCoordinator.resetBufferTracking()
 
         // Clear transcription + translation text for fresh interpretation segment.
-        // Each TTS cycle starts with a clean slate so the user sees only the
-        // current segment, not accumulated history.
-        completedChunksText = ""
+        transcriptionCoordinator.clearCompletedChunks()
         confirmedSegments = []
         unconfirmedSegments = []
-        prevUnconfirmedSegments = []
-        lastConfirmedSegmentEndSeconds = 0
         confirmedText = ""
         hypothesisText = ""
         translatedConfirmedText = ""
@@ -719,7 +655,7 @@ final class WhisperService {
         isTranscribing = true
         sessionState = .recording
 
-        realtimeLoop()
+        transcriptionCoordinator.startLoop()
     }
 
     func clearTranscription() {
@@ -744,8 +680,8 @@ final class WhisperService {
 
         resetTranscriptionState()
 
-        cancelAndTrackTranscriptionTask()
-        transcriptionTask = Task {
+        transcriptionCoordinator.cancelAndTrackTranscriptionTask()
+        e2eTask = Task {
             do {
                 NSLog("[E2E] Loading WAV file...")
                 let samples = try Self.loadWavFile(path: path)
@@ -868,7 +804,7 @@ final class WhisperService {
     private static func loadWavFile(path: String) throws -> [Float] {
         let url = URL(fileURLWithPath: path)
         let file = try AVAudioFile(forReading: url)
-        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false)!
+        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: AudioConstants.sampleRate, channels: 1, interleaved: false)!
         let frameCount = AVAudioFrameCount(file.length)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
             throw NSError(domain: "WhisperService", code: -1,
@@ -884,286 +820,53 @@ final class WhisperService {
     #endif
 
     var fullTranscriptionText: String {
-        let currentChunkConfirmed = normalizedJoinedText(from: confirmedSegments)
-        let currentChunkHypothesis = normalizedJoinedText(from: unconfirmedSegments)
-        let currentChunk = [currentChunkConfirmed, currentChunkHypothesis]
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-        let parts = [completedChunksText, currentChunk]
-            .filter { !$0.isEmpty }
-        return parts.joined(separator: "\n")
-    }
-
-    // MARK: - Private: Real-time Loop
-
-    private func realtimeLoop() {
-        cancelAndTrackTranscriptionTask()
-
-        guard let engine = activeEngine else { return }
-
-        transcriptionTask = Task {
-            await offlineLoop(engine: engine)
-        }
-    }
-
-    private func offlineLoop(engine: ASREngine) async {
-        while isRecording && isTranscribing && !Task.isCancelled {
-            do {
-                try await transcribeCurrentBuffer(engine: engine)
-            } catch {
-                if !Task.isCancelled {
-                    lastError = .transcriptionFailed(underlying: error)
-                }
-                break
-            }
-        }
-
-        if !Task.isCancelled {
-            isRecording = false
-            isTranscribing = false
-            sessionState = .idle
-            systemAudioSource?.stop()
-            systemAudioSource = nil
-            engine.stopRecording()
-        }
-    }
-
-    private func transcribeCurrentBuffer(engine: ASREngine) async throws {
-        let currentBuffer = effectiveAudioSamples
-        let nextBufferSize = currentBuffer.count - lastBufferSize
-        let nextBufferSeconds = Float(nextBufferSize) / Self.sampleRate
-        refreshRealtimeMeters(engine: engine)
-
-        let effectiveDelay = adaptiveDelay()
-        guard nextBufferSeconds > Float(effectiveDelay) else {
-            try await Task.sleep(for: .milliseconds(100))
-            return
-        }
-
-        // Bypass VAD for broadcast mode — continuous audio, not voice-triggered
-        if useVAD && audioCaptureMode != .systemBroadcast {
-            // Bypass VAD for the first second so initial speech is never dropped
-            let vadBypassSamples = Int(Self.sampleRate * Self.initialVADBypassSeconds)
-            let bypassVadDuringStartup = !hasCompletedFirstInference && currentBuffer.count <= vadBypassSamples
-            if !bypassVadDuringStartup {
-                let voiceDetected = isVoiceDetected(
-                    in: effectiveRelativeEnergy,
-                    nextBufferInSeconds: nextBufferSeconds
-                )
-                if !voiceDetected {
-                    consecutiveSilenceCount += 1
-                    // Keep a pre-roll so utterance onsets straddling VAD are preserved
-                    let prerollSamples = Int(Self.sampleRate * Self.vadPrerollSeconds)
-                    lastBufferSize = max(currentBuffer.count - prerollSamples, 0)
-                    return
-                }
-                consecutiveSilenceCount = 0
-            }
-        }
-
-        // Chunk-based windowing: process audio in fixed-size chunks to prevent
-        // models from receiving unbounded audio. When the buffer grows past the
-        // current chunk boundary, finalize the hypothesis and start a new chunk.
-        let bufferEndSeconds = Float(currentBuffer.count) / Self.sampleRate
-        var chunkEndSeconds = lastConfirmedSegmentEndSeconds + Self.maxChunkSeconds
-
-        if bufferEndSeconds > chunkEndSeconds {
-            finalizeCurrentChunk()
-            lastConfirmedSegmentEndSeconds = chunkEndSeconds
-            // Recompute for the new chunk so we don't produce an empty slice
-            chunkEndSeconds = lastConfirmedSegmentEndSeconds + Self.maxChunkSeconds
-        }
-
-        // Slice audio for the current chunk window
-        let sliceStartSeconds = lastConfirmedSegmentEndSeconds
-        let sliceStartSample = min(Int(sliceStartSeconds * Self.sampleRate), currentBuffer.count)
-        let sliceEndSample = min(Int(chunkEndSeconds * Self.sampleRate), currentBuffer.count)
-        let audioSamples = Array(currentBuffer[sliceStartSample..<sliceEndSample])
-        guard !audioSamples.isEmpty else { return }
-
-        // RMS energy gate: skip inference on near-silence audio to avoid
-        // SenseVoice hallucinations ("I.", "Yeah.", "The.") and save CPU.
-        // NOTE: lastBufferSize is NOT updated on skip — this ensures that when
-        // speech resumes after silence, nextBufferSeconds is already large enough
-        // to pass the delay guard immediately, giving near-instant response.
-        let sliceRMS = sqrt(audioSamples.reduce(Float(0)) { $0 + $1 * $1 } / Float(audioSamples.count))
-        if sliceRMS < Self.minInferenceRMS {
-            try await Task.sleep(for: .milliseconds(500))
-            return
-        }
-
-        lastBufferSize = currentBuffer.count
-
-        let options = ASRTranscriptionOptions(
-            withTimestamps: enableTimestamps,
-            temperature: 0.0
+        transcriptionCoordinator.assembleFullText(
+            confirmedSegments: confirmedSegments,
+            unconfirmedSegments: unconfirmedSegments
         )
-
-        let sliceDurationSeconds = Float(audioSamples.count) / Self.sampleRate
-        let startTime = CFAbsoluteTimeGetCurrent()
-        let result = try await engine.transcribe(audioArray: audioSamples, options: options)
-        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-
-        guard !Task.isCancelled else { return }
-
-        let wordCount = result.text.split(separator: " ").count
-        if elapsed > 0 && wordCount > 0 {
-            tokensPerSecond = Double(wordCount) / elapsed
-        }
-
-        // Track inference time with EMA for CPU-aware delay
-        if movingAverageInferenceSeconds <= 0 {
-            movingAverageInferenceSeconds = elapsed
-        } else {
-            movingAverageInferenceSeconds = Self.inferenceEmaAlpha * elapsed
-                + (1.0 - Self.inferenceEmaAlpha) * movingAverageInferenceSeconds
-        }
-
-        NSLog("[WhisperService] chunk inference: %.1fs audio in %.2fs (ratio %.1fx, %d words, emaInf=%.3fs, delay=%.2fs)",
-              sliceDurationSeconds, elapsed, Double(sliceDurationSeconds) / elapsed, wordCount,
-              movingAverageInferenceSeconds, adaptiveDelay())
-
-        hasCompletedFirstInference = true
-        processTranscriptionResult(result, sliceOffset: sliceStartSeconds)
     }
 
-    /// Voice activity detection using peak + average energy (matches Android).
-    private func isVoiceDetected(in energy: [Float], nextBufferInSeconds: Float) -> Bool {
-        guard !energy.isEmpty else { return false }
-        let recentEnergy = energy.suffix(10)
-        let peakEnergy = recentEnergy.max() ?? 0
-        let avgEnergy = recentEnergy.reduce(0, +) / Float(recentEnergy.count)
-        return peakEnergy >= silenceThreshold || avgEnergy >= silenceThreshold * 0.5
+    // MARK: - Internal API (for TranscriptionCoordinator)
+
+    func updateTranscriptionText(confirmed: String, hypothesis: String) {
+        if confirmedText != confirmed { confirmedText = confirmed }
+        if hypothesisText != hypothesis { hypothesisText = hypothesis }
     }
 
-    private func adaptiveDelay() -> Double {
-        // During silence, back off to save CPU
-        if consecutiveSilenceCount > 5 {
-            return min(realtimeDelayInterval * 3.0, 3.0)
-        } else if consecutiveSilenceCount > 2 {
-            return realtimeDelayInterval * 2.0
-        }
-
-        // Fast initial gate: show first words quickly (matches Android 0.35s)
-        if !hasCompletedFirstInference {
-            return Double(Self.initialMinNewAudioSeconds)
-        }
-
-        // CPU-aware delay (matches Android architecture)
-        return computeCpuAwareDelay(baseDelay: Double(Self.sherpaBaseDelaySeconds))
+    func updateSegments(confirmed: [ASRSegment], unconfirmed: [ASRSegment]) {
+        confirmedSegments = confirmed
+        unconfirmedSegments = unconfirmed
     }
 
-    /// Compute delay based on actual inference time to maintain a target CPU duty cycle.
-    /// If inference takes 0.17s and target duty is 24%, delay = 0.17/0.24 = 0.71s.
-    /// This adapts automatically to device speed — fast devices get shorter delays.
-    private func computeCpuAwareDelay(baseDelay: Double) -> Double {
-        let avg = movingAverageInferenceSeconds
-        guard avg > 0 else { return baseDelay }
-        let budgetDelay = avg / Double(Self.targetInferenceDutyCycle)
-        return max(baseDelay, min(budgetDelay, Double(Self.maxCpuProtectDelaySeconds)))
+    func updateUnconfirmedSegments(_ segments: [ASRSegment]) {
+        unconfirmedSegments = segments
     }
 
-    /// Update render-facing meters at a fixed cadence with bounded payload size.
-    private func refreshRealtimeMeters(engine: ASREngine, force: Bool = false) {
-        let now = CFAbsoluteTimeGetCurrent()
-        if !force, now - lastUIMeterUpdateTimestamp < Self.uiMeterUpdateInterval {
-            return
-        }
-        lastUIMeterUpdateTimestamp = now
-
-        let sampleCount = effectiveAudioSamples.count
-        let nextBufferSeconds = Double(sampleCount) / Double(Self.sampleRate)
-        if bufferSeconds != nextBufferSeconds {
-            bufferSeconds = nextBufferSeconds
-        }
-
-        let nextEnergy = Array(effectiveRelativeEnergy.suffix(Self.displayEnergyFrameLimit))
-        if bufferEnergy != nextEnergy {
-            bufferEnergy = nextEnergy
-        }
+    func updateMeters(energy: [Float], bufferSeconds seconds: Double) {
+        if bufferEnergy != energy { bufferEnergy = energy }
+        if bufferSeconds != seconds { bufferSeconds = seconds }
     }
 
-    private func processTranscriptionResult(_ result: ASRResult, sliceOffset: Float = 0) {
-        let newSegments = result.segments
-
-        // Apply detected language to translation direction
-        if let lang = result.language, !lang.isEmpty, lang != detectedLanguage {
-            detectedLanguage = lang
-            applyDetectedLanguageToTranslation(lang)
-        }
-
-        // Eager mode disabled for SenseVoice — single-segment models always return
-        // 1 segment whose text changes every cycle, so segment comparison never confirms.
-        unconfirmedSegments = newSegments
-
-        prevUnconfirmedSegments = unconfirmedSegments
-
-        // Build confirmed text: completed chunks + within-chunk confirmed segments
-        let withinChunkConfirmed = normalizedJoinedText(from: confirmedSegments)
-        let nextConfirmedText = [completedChunksText, withinChunkConfirmed]
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n")
-        let nextHypothesisText = normalizedJoinedText(from: unconfirmedSegments)
-        let transcriptionChanged = confirmedText != nextConfirmedText || hypothesisText != nextHypothesisText
-        if confirmedText != nextConfirmedText {
-            confirmedText = nextConfirmedText
-        }
-        if hypothesisText != nextHypothesisText {
-            hypothesisText = nextHypothesisText
-        }
-        if transcriptionChanged {
-            scheduleTranslationUpdate()
-        }
+    func updateTokensPerSecond(_ value: Double) {
+        tokensPerSecond = value
     }
 
-    /// Finalize the current chunk: combine all segments into completed text and reset per-chunk state.
-    private func finalizeCurrentChunk() {
-        let allSegments = confirmedSegments + unconfirmedSegments
-        let chunkText = normalizedJoinedText(from: allSegments)
-        if !chunkText.isEmpty {
-            if completedChunksText.isEmpty {
-                completedChunksText = chunkText
-            } else {
-                completedChunksText += "\n" + chunkText
-            }
-        }
-        confirmedSegments = []
-        unconfirmedSegments = []
-        prevUnconfirmedSegments = []
-        let nextConfirmedText = completedChunksText
-        let transcriptionChanged = confirmedText != nextConfirmedText || !hypothesisText.isEmpty
-        if confirmedText != nextConfirmedText {
-            confirmedText = nextConfirmedText
-        }
-        if !hypothesisText.isEmpty {
-            hypothesisText = ""
-        }
-        if transcriptionChanged {
-            scheduleTranslationUpdate()
-        }
+    func updateDetectedLanguage(_ lang: String) {
+        detectedLanguage = lang
     }
 
-    private func normalizedJoinedText(from segments: [ASRSegment]) -> String {
-        segments.lazy
-            .map { self.normalizedSegmentText($0.text) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+    func updateLastError(_ error: AppError) {
+        lastError = error
     }
 
-    private func normalizedSegmentText(_ text: String) -> String {
-        normalizeDisplayText(text)
-    }
-
-    private func normalizeDisplayText(_ text: String) -> String {
-        // Normalize whitespace within each line but preserve newlines between chunks
-        text
-            .components(separatedBy: "\n")
-            .map { line in
-                collapseInlineWhitespace(in: line)
-                    .trimmingCharacters(in: .whitespaces)
-            }
-            .joined(separator: "\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    /// Called by TranscriptionCoordinator when the inference loop exits naturally.
+    func endTranscriptionLoop() {
+        isRecording = false
+        isTranscribing = false
+        sessionState = .idle
+        systemAudioSource?.stop()
+        systemAudioSource = nil
+        activeEngine?.stopRecording()
     }
 
     // MARK: - Detected Language → Translation Direction
@@ -1171,7 +874,7 @@ final class WhisperService {
     /// When the ASR engine detects a language, automatically adjust translation direction.
     /// If detected == current target, swap source↔target (e.g. detected "ja" when target is "ja" → flip).
     /// If detected is outside the configured pair, ignore it to preserve the pair.
-    private func applyDetectedLanguageToTranslation(_ lang: String) {
+    func applyDetectedLanguageToTranslation(_ lang: String) {
         guard translationEnabled else { return }
         let currentSource = translationSourceLanguageCode
         let currentTarget = translationTargetLanguageCode
@@ -1235,7 +938,7 @@ final class WhisperService {
             || sessionState == .starting || sessionState == .interrupted)
     }
 
-    private func scheduleTranslationUpdate() {
+    func scheduleTranslationUpdate() {
         translationTask?.cancel()
 
         guard translationEnabled else {
@@ -1266,8 +969,8 @@ final class WhisperService {
         #if targetEnvironment(simulator)
         // iOS Simulator cannot run the native Translation framework pipeline.
         // Keep translation/TTS flows testable by using source text fallback inline.
-        let simulatorConfirmed = normalizeDisplayText(confirmedSnapshot)
-        let simulatorHypothesis = normalizeDisplayText(hypothesisSnapshot)
+        let simulatorConfirmed = transcriptionCoordinator.normalizeDisplayText(confirmedSnapshot)
+        let simulatorHypothesis = transcriptionCoordinator.normalizeDisplayText(hypothesisSnapshot)
         applyTranslationFallback(
             confirmed: simulatorConfirmed,
             hypothesis: simulatorHypothesis,
@@ -1280,8 +983,8 @@ final class WhisperService {
         #else
         if sourceCode.caseInsensitiveCompare(targetCode) == .orderedSame {
             applyTranslationFallback(
-                confirmed: normalizeDisplayText(confirmedSnapshot),
-                hypothesis: normalizeDisplayText(hypothesisSnapshot),
+                confirmed: transcriptionCoordinator.normalizeDisplayText(confirmedSnapshot),
+                hypothesis: transcriptionCoordinator.normalizeDisplayText(hypothesisSnapshot),
                 warning: nil
             )
             lastTranslationInput = (confirmedSnapshot, hypothesisSnapshot)
@@ -1319,8 +1022,8 @@ final class WhisperService {
                 NSLog("[WhisperService] Translation failed (AppError): %@", appError.localizedDescription)
                 warningMessage = appError.localizedDescription
                 self.applyTranslationFallback(
-                    confirmed: self.normalizeDisplayText(confirmedSnapshot),
-                    hypothesis: self.normalizeDisplayText(hypothesisSnapshot),
+                    confirmed: self.transcriptionCoordinator.normalizeDisplayText(confirmedSnapshot),
+                    hypothesis: self.transcriptionCoordinator.normalizeDisplayText(hypothesisSnapshot),
                     warning: warningMessage
                 )
             } catch {
@@ -1328,8 +1031,8 @@ final class WhisperService {
                 NSLog("[WhisperService] Translation failed: %@", error.localizedDescription)
                 warningMessage = AppError.translationFailed(underlying: error).localizedDescription
                 self.applyTranslationFallback(
-                    confirmed: self.normalizeDisplayText(confirmedSnapshot),
-                    hypothesis: self.normalizeDisplayText(hypothesisSnapshot),
+                    confirmed: self.transcriptionCoordinator.normalizeDisplayText(confirmedSnapshot),
+                    hypothesis: self.transcriptionCoordinator.normalizeDisplayText(hypothesisSnapshot),
                     warning: warningMessage
                 )
             }
@@ -1341,16 +1044,6 @@ final class WhisperService {
         #endif
     }
 
-    private func collapseInlineWhitespace(in line: String) -> String {
-        let range = NSRange(line.startIndex..<line.endIndex, in: line)
-        return Self.inlineWhitespaceRegex.stringByReplacingMatches(
-            in: line,
-            options: [],
-            range: range,
-            withTemplate: " "
-        )
-    }
-
     private func applyTranslationFallback(confirmed: String, hypothesis: String, warning: String?) {
         translatedConfirmedText = confirmed
         translatedHypothesisText = hypothesis
@@ -1360,13 +1053,13 @@ final class WhisperService {
     private func speakTranslatedDeltaIfNeeded(from translatedConfirmed: String) {
         guard speakTranslatedAudio else { return }
 
-        let normalized = normalizeDisplayText(translatedConfirmed)
+        let normalized = transcriptionCoordinator.normalizeDisplayText(translatedConfirmed)
         guard !normalized.isEmpty else { return }
 
         var delta = normalized
         if !lastSpokenTranslatedConfirmed.isEmpty,
            normalized.hasPrefix(lastSpokenTranslatedConfirmed) {
-            delta = normalizeDisplayText(
+            delta = transcriptionCoordinator.normalizeDisplayText(
                 String(normalized.dropFirst(lastSpokenTranslatedConfirmed.count))
             )
         }
@@ -1392,10 +1085,8 @@ final class WhisperService {
     }
 
     private func resetTranscriptionState() {
-        cancelAndTrackTranscriptionTask()
+        transcriptionCoordinator.reset()
         resetTranslationState(stopTTS: false)
-        lastBufferSize = 0
-        lastConfirmedSegmentEndSeconds = 0
         confirmedSegments = []
         unconfirmedSegments = []
         confirmedText = ""
@@ -1405,15 +1096,9 @@ final class WhisperService {
         ttsMicGuardViolations = 0
         micStoppedForTTS = false
         detectedLanguage = nil
-        completedChunksText = ""
         bufferEnergy = []
         bufferSeconds = 0
         tokensPerSecond = 0
-        prevUnconfirmedSegments = []
-        consecutiveSilenceCount = 0
-        hasCompletedFirstInference = false
-        movingAverageInferenceSeconds = 0.0
-        lastUIMeterUpdateTimestamp = 0
         lastError = nil
     }
 
@@ -1421,7 +1106,7 @@ final class WhisperService {
 
     #if DEBUG
     func testFeedResult(_ result: ASRResult) {
-        processTranscriptionResult(result)
+        transcriptionCoordinator.processTranscriptionResult(result)
     }
 
     func testSetState(
@@ -1452,7 +1137,7 @@ final class WhisperService {
     func testSimulateInterruption(began: Bool) {
         if began {
             if isRecording {
-                cancelAndTrackTranscriptionTask()
+                transcriptionCoordinator.cancelAndTrackTranscriptionTask()
                 isTranscribing = false
                 sessionState = .interrupted
             }
