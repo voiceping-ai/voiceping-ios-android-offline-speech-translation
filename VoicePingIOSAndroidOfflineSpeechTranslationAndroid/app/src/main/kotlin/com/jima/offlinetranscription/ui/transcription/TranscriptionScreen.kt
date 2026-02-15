@@ -203,101 +203,19 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Transcription text area
-            Column(
+            TranscriptionTextDisplay(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(scrollState)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.Top
-            ) {
-                if (displayConfirmedText.isNotEmpty()) {
-                    Text(
-                        text = displayConfirmedText,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                if (displayHypothesisText.isNotEmpty()) {
-                    Text(
-                        text = displayHypothesisText,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontStyle = FontStyle.Italic
-                    )
-                }
-
-                if (translationEnabled &&
-                    (displayTranslatedConfirmedText.isNotEmpty() || displayTranslatedHypothesisText.isNotEmpty())
-                ) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider()
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Translation (${translationTargetLanguageCode})",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (displayTranslatedConfirmedText.isNotEmpty()) {
-                        Text(
-                            text = displayTranslatedConfirmedText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    if (displayTranslatedHypothesisText.isNotEmpty()) {
-                        Text(
-                            text = displayTranslatedHypothesisText,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-                            fontStyle = FontStyle.Italic
-                        )
-                    }
-                    if (displayTranslationWarning.isNotEmpty()) {
-                        Text(
-                            text = "Warning: $displayTranslationWarning",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                } else if (translationEnabled && isRecording &&
-                    (displayConfirmedText.isNotEmpty() || displayHypothesisText.isNotEmpty())
-                ) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Translating...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                } else if (translationEnabled &&
-                    displayTranslationWarning.isNotEmpty() &&
-                    (displayConfirmedText.isNotEmpty() || displayHypothesisText.isNotEmpty())
-                ) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Warning: $displayTranslationWarning",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-
-                if (displayConfirmedText.isEmpty() && displayHypothesisText.isEmpty() && !isRecording) {
-                    Text(
-                        text = "Tap the microphone button to start transcribing.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                }
-
-                if (isRecording && displayConfirmedText.isEmpty() && displayHypothesisText.isEmpty()) {
-                    Text(
-                        text = "Listening...",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                }
-            }
+                    .verticalScroll(scrollState),
+                confirmedText = displayConfirmedText,
+                hypothesisText = displayHypothesisText,
+                translationEnabled = translationEnabled,
+                translatedConfirmedText = displayTranslatedConfirmedText,
+                translatedHypothesisText = displayTranslatedHypothesisText,
+                translationTargetLanguageCode = translationTargetLanguageCode,
+                translationWarning = displayTranslationWarning,
+                isRecording = isRecording
+            )
 
             HorizontalDivider()
 
@@ -373,63 +291,14 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
                 )
             }
 
-            // Controls
-            val canSave = !isRecording && viewModel.fullText.isNotBlank()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { viewModel.saveTranscription() },
-                    enabled = canSave,
-                    modifier = Modifier.semantics { contentDescription = "Save" }
-                ) {
-                    Icon(
-                        Icons.Filled.Save,
-                        contentDescription = null,
-                        tint = if (canSave) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                IconButton(
-                    onClick = { viewModel.transcribeTestAsset(context) },
-                    enabled = !isRecording,
-                    modifier = Modifier.semantics { contentDescription = "Test Audio File" }
-                ) {
-                    Icon(
-                        Icons.Filled.AudioFile,
-                        contentDescription = null,
-                        tint = if (!isRecording) MaterialTheme.colorScheme.onSurfaceVariant
-                        else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                RecordButton(
-                    isRecording = isRecording,
-                    onClick = { onRecordClick() }
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                IconButton(
-                    onClick = { showSettings = true },
-                    modifier = Modifier.semantics { contentDescription = "Settings" }
-                ) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            ControlButtonsRow(
+                isRecording = isRecording,
+                canSave = !isRecording && viewModel.fullText.isNotBlank(),
+                onSave = { viewModel.saveTranscription() },
+                onTestAudio = { viewModel.transcribeTestAsset(context) },
+                onRecord = { onRecordClick() },
+                onSettings = { showSettings = true }
+            )
         }
     }
 
@@ -517,6 +386,177 @@ fun TranscriptionScreen(viewModel: TranscriptionViewModel) {
             onTimestampsChange = { viewModel.setEnableTimestamps(it) },
             onDismiss = { showSettings = false }
         )
+    }
+}
+
+@Composable
+private fun TranscriptionTextDisplay(
+    modifier: Modifier = Modifier,
+    confirmedText: String,
+    hypothesisText: String,
+    translationEnabled: Boolean,
+    translatedConfirmedText: String,
+    translatedHypothesisText: String,
+    translationTargetLanguageCode: String,
+    translationWarning: String,
+    isRecording: Boolean
+) {
+    Column(
+        modifier = modifier.padding(16.dp),
+        verticalArrangement = Arrangement.Top
+    ) {
+        if (confirmedText.isNotEmpty()) {
+            Text(
+                text = confirmedText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        if (hypothesisText.isNotEmpty()) {
+            Text(
+                text = hypothesisText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontStyle = FontStyle.Italic
+            )
+        }
+
+        if (translationEnabled &&
+            (translatedConfirmedText.isNotEmpty() || translatedHypothesisText.isNotEmpty())
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Translation ($translationTargetLanguageCode)",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (translatedConfirmedText.isNotEmpty()) {
+                Text(
+                    text = translatedConfirmedText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            if (translatedHypothesisText.isNotEmpty()) {
+                Text(
+                    text = translatedHypothesisText,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                    fontStyle = FontStyle.Italic
+                )
+            }
+            if (translationWarning.isNotEmpty()) {
+                Text(
+                    text = "Warning: $translationWarning",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        } else if (translationEnabled && isRecording &&
+            (confirmedText.isNotEmpty() || hypothesisText.isNotEmpty())
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Translating...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            )
+        } else if (translationEnabled &&
+            translationWarning.isNotEmpty() &&
+            (confirmedText.isNotEmpty() || hypothesisText.isNotEmpty())
+        ) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Warning: $translationWarning",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        if (confirmedText.isEmpty() && hypothesisText.isEmpty() && !isRecording) {
+            Text(
+                text = "Tap the microphone button to start transcribing.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+
+        if (isRecording && confirmedText.isEmpty() && hypothesisText.isEmpty()) {
+            Text(
+                text = "Listening...",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ControlButtonsRow(
+    isRecording: Boolean,
+    canSave: Boolean,
+    onSave: () -> Unit,
+    onTestAudio: () -> Unit,
+    onRecord: () -> Unit,
+    onSettings: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(
+            onClick = onSave,
+            enabled = canSave,
+            modifier = Modifier.semantics { contentDescription = "Save" }
+        ) {
+            Icon(
+                Icons.Filled.Save,
+                contentDescription = null,
+                tint = if (canSave) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        IconButton(
+            onClick = onTestAudio,
+            enabled = !isRecording,
+            modifier = Modifier.semantics { contentDescription = "Test Audio File" }
+        ) {
+            Icon(
+                Icons.Filled.AudioFile,
+                contentDescription = null,
+                tint = if (!isRecording) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        RecordButton(
+            isRecording = isRecording,
+            onClick = onRecord
+        )
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        IconButton(
+            onClick = onSettings,
+            modifier = Modifier.semantics { contentDescription = "Settings" }
+        ) {
+            Icon(
+                Icons.Filled.Settings,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

@@ -496,18 +496,18 @@ final class UserFlowUITests: XCTestCase {
         let settingsTitle = app.navigationBars["Settings"]
         XCTAssertTrue(settingsTitle.waitForExistence(timeout: shortTimeout))
 
-        // Tap Parakeet TDT model row (second model in this repo)
-        let parakeetRow = app.buttons["model_row_parakeet-tdt-v3"]
+        // Tap Apple Speech model row (second model in this repo)
+        let appleSpeechRow = app.buttons["model_row_apple-speech"]
         // May need to scroll to find it
-        if !parakeetRow.waitForExistence(timeout: 3) {
+        if !appleSpeechRow.waitForExistence(timeout: 3) {
             app.swipeUp()
             sleep(1)
         }
         XCTAssertTrue(
-            parakeetRow.waitForExistence(timeout: shortTimeout),
-            "Parakeet TDT row should exist in settings"
+            appleSpeechRow.waitForExistence(timeout: shortTimeout),
+            "Apple Speech row should exist in settings"
         )
-        parakeetRow.tap()
+        appleSpeechRow.tap()
 
         captureScreenshot(app, step: "02_switching")
 

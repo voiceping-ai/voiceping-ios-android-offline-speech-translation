@@ -23,7 +23,7 @@ This repository currently ships a focused model set per platform.
 
 ### iOS app (`OfflineTranscription`)
 
-- ASR models: `SenseVoice Small`, `Parakeet TDT 0.6B`, and `Apple Speech`.
+- ASR models: `SenseVoice Small` and `Apple Speech`.
 - Audio source switching:
 - `Voice` (microphone)
 - `System` (ReplayKit Broadcast Upload Extension)
@@ -35,7 +35,7 @@ This repository currently ships a focused model set per platform.
 
 ### Android app (`VoicePingIOSAndroidOfflineSpeechTranslationAndroid`)
 
-- ASR models: `SenseVoice Small`, `Parakeet TDT 0.6B`, `Android Speech (Offline)`, `Android Speech (Online)`.
+- ASR models: `SenseVoice Small`, `Android Speech (Offline)`, `Android Speech (Online)`.
 - Audio source switching:
 - `Voice` (microphone)
 - `System` (MediaProjection playback capture)
@@ -54,7 +54,6 @@ This repository currently ships a focused model set per platform.
 | Model ID | Engine | Languages |
 |---|---|---|
 | [`sensevoice-small`](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) | sherpa-onnx offline | `zh/en/ja/ko/yue` |
-| [`parakeet-tdt-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | sherpa-onnx offline (transducer) | `25 European languages` |
 | [`apple-speech`](https://developer.apple.com/documentation/speech/sfspeechrecognizer) | SFSpeechRecognizer | `50+ languages` |
 
 ### Android (`.../model/ModelInfo.kt`)
@@ -62,7 +61,6 @@ This repository currently ships a focused model set per platform.
 | Model ID | Engine | Languages |
 |---|---|---|
 | [`sensevoice-small`](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) | sherpa-onnx offline | `zh/en/ja/ko/yue` |
-| [`parakeet-tdt-v3`](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | sherpa-onnx offline (transducer) | `25 European languages` |
 | `android-speech-offline` | Android SpeechRecognizer (on-device, API 31+) | `System languages` |
 | `android-speech-online` | Android SpeechRecognizer (standard recognizer) | `System languages` |
 
@@ -245,8 +243,6 @@ Fixture: `artifacts/benchmarks/long_en_eval.wav` (30.00s, 16kHz mono WAV)
 | Model | Engine | Words | Inference (ms) | Tok/s | RTF | Result |
 |---|---|---:|---:|---:|---:|---|
 | `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 2458 | 23.59 | 0.08 | PASS |
-| `apple-speech` | - | 0 | n/a | n/a | n/a | SKIP |
-| `parakeet-tdt-v3` | - | 0 | n/a | n/a | n/a | SKIP |
 
 #### Android Graph
 
@@ -257,9 +253,6 @@ Fixture: `artifacts/benchmarks/long_en_eval.wav` (30.00s, 16kHz mono WAV)
 | Model | Engine | Words | Inference (ms) | Tok/s | RTF | Result |
 |---|---|---:|---:|---:|---:|---|
 | `sensevoice-small` | sherpa-onnx offline (ONNX Runtime) | 58 | 1725 | 33.63 | 0.06 | PASS |
-| `parakeet-tdt-v3` | sherpa-onnx offline (ONNX Runtime) | 58 | 2928 | 19.81 | 0.10 | PASS |
-| `android-speech-offline` | - | 0 | n/a | n/a | n/a | SKIP |
-| `android-speech-online` | - | 0 | n/a | n/a | n/a | SKIP |
 
 #### Reproduce
 
@@ -270,5 +263,7 @@ Fixture: `artifacts/benchmarks/long_en_eval.wav` (30.00s, 16kHz mono WAV)
 5. `python3 scripts/generate-inference-report.py --audio artifacts/benchmarks/long_en_eval.wav --update-readme`
 
 One-command runner: `TARGET_SECONDS=30 scripts/run-inference-benchmarks.sh`
+
+> **Want to see a new model or device benchmark?** If there is an offline ASR model you would like added or benchmarked on a specific device, please [open an issue](https://github.com/voiceping-ai/ios-android-offline-speech-translation/issues/new) with the model name and target hardware. Community contributions of benchmark results are also welcome.
 
 <!-- BENCHMARK_RESULTS_END -->

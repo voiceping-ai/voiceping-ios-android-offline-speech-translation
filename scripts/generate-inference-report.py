@@ -25,13 +25,11 @@ from typing import Any
 
 IOS_MODELS = [
     "sensevoice-small",
-    "parakeet-tdt-v3",
     "apple-speech",
 ]
 
 ANDROID_MODELS = [
     "sensevoice-small",
-    "parakeet-tdt-v3",
     "android-speech-offline",
     "android-speech-online",
 ]

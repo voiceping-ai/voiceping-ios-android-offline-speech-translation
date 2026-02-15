@@ -351,10 +351,7 @@ class WhisperEngine(
     /** Create the ASR engine for the given model. */
     private fun createEngine(model: ModelInfo): AsrEngine {
         return when (model.engineType) {
-            EngineType.SHERPA_ONNX -> SherpaOnnxEngine(
-                modelType = model.sherpaModelType
-                    ?: throw IllegalArgumentException("sherpaModelType required for SHERPA_ONNX models")
-            )
+            EngineType.SHERPA_ONNX -> SherpaOnnxEngine()
             EngineType.ANDROID_SPEECH -> AndroidSpeechEngine(
                 context = context,
                 mode = model.androidSpeechMode ?: AndroidSpeechMode.OFFLINE

@@ -6,8 +6,6 @@ import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
-import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
-import com.voiceping.offlinetranscription.model.SherpaModelType
 import com.voiceping.offlinetranscription.util.TextNormalizationUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,16 +14,13 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
 /**
- * ASR engine backed by sherpa-onnx for offline recognition.
- * Supports SenseVoice and Parakeet TDT (transducer) models.
+ * ASR engine backed by sherpa-onnx for offline recognition (SenseVoice).
  * Expects a model directory containing the required ONNX files + tokens.txt.
  *
  * All access to [recognizer] is guarded by [lock] so that release()
  * cannot free the recognizer while transcribe() is in-flight.
  */
-class SherpaOnnxEngine(
-    private val modelType: SherpaModelType
-) : AsrEngine {
+class SherpaOnnxEngine : AsrEngine {
     companion object {
         private const val TAG = "SherpaOnnxEngine"
     }
@@ -108,30 +103,17 @@ class SherpaOnnxEngine(
     private fun buildConfig(modelDir: String, threads: Int, provider: String): OfflineRecognizerConfig {
         val tokensPath = File(modelDir, "tokens.txt").absolutePath
 
-        val modelConfig = when (modelType) {
-            SherpaModelType.SENSE_VOICE -> OfflineModelConfig(
-                senseVoice = OfflineSenseVoiceModelConfig(
-                    model = findFile(modelDir, "model"),
-                    language = "auto",
-                    useInverseTextNormalization = true,
-                ),
-                tokens = tokensPath,
-                numThreads = threads,
-                debug = false,
-                provider = provider,
-            )
-            SherpaModelType.PARAKEET_TRANSDUCER -> OfflineModelConfig(
-                transducer = OfflineTransducerModelConfig(
-                    encoder = findFile(modelDir, "encoder"),
-                    decoder = findFile(modelDir, "decoder"),
-                    joiner = findFile(modelDir, "joiner"),
-                ),
-                tokens = tokensPath,
-                numThreads = threads,
-                debug = false,
-                provider = provider,
-            )
-        }
+        val modelConfig = OfflineModelConfig(
+            senseVoice = OfflineSenseVoiceModelConfig(
+                model = findFile(modelDir, "model"),
+                language = "auto",
+                useInverseTextNormalization = true,
+            ),
+            tokens = tokensPath,
+            numThreads = threads,
+            debug = false,
+            provider = provider,
+        )
 
         return OfflineRecognizerConfig(
             featConfig = FeatureConfig(sampleRate = 16000, featureDim = 80),

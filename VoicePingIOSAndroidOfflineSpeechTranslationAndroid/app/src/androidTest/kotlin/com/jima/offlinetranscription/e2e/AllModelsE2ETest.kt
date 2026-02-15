@@ -36,7 +36,6 @@ class AllModelsE2ETest {
     private fun timeout(modelId: String): Long = when {
         modelId.contains("large") -> 1_800_000L
         modelId.contains("omnilingual") -> 600_000L
-        modelId.contains("parakeet") -> 900_000L
         modelId.contains("small") -> 600_000L
         modelId.contains("base") -> 300_000L
         else -> 120_000L
@@ -60,7 +59,6 @@ class AllModelsE2ETest {
     @Test fun test_moonshineTiny(): Unit = testModel("moonshine-tiny")
     @Test fun test_moonshineBase(): Unit = testModel("moonshine-base")
     @Test fun test_sensevoiceSmall(): Unit = testModel("sensevoice-small")
-    @Test fun test_parakeetTdtV3(): Unit = testModel("parakeet-tdt-v3")
     @Test fun test_omnilingual300m(): Unit = testModel("omnilingual-300m")
     @Test fun test_zipformer20m(): Unit = testModel("zipformer-20m")
 

@@ -60,27 +60,6 @@ struct ModelInfo: Identifiable, Hashable {
             )
         ),
 
-        // MARK: - Parakeet TDT (sherpa-onnx offline transducer)
-        ModelInfo(
-            id: "parakeet-tdt-v3",
-            displayName: "Parakeet TDT 0.6B",
-            parameterCount: "600M",
-            sizeOnDisk: "~671 MB",
-            description: "Best English WER (2.5%). 25 European languages.",
-            family: .parakeet,
-            engineType: .sherpaOnnxOffline,
-            languages: "25 European languages",
-            variant: nil,
-            sherpaModelConfig: SherpaModelConfig(
-                repoName: "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8",
-                tokens: "tokens.txt",
-                modelType: .parakeetTransducer,
-                encoder: "encoder.int8.onnx",
-                decoder: "decoder.int8.onnx",
-                joiner: "joiner.int8.onnx"
-            )
-        ),
-
         // MARK: - Apple Speech (built-in SFSpeechRecognizer)
         ModelInfo(
             id: "apple-speech",
@@ -101,7 +80,7 @@ struct ModelInfo: Identifiable, Hashable {
         NSLog("[ModelInfo] WARNING: sensevoice-small not found in catalog, falling back to first model")
         return availableModels[0]
     }()
-    private static let familyDisplayOrder: [ModelFamily] = [.senseVoice, .parakeet, .appleSpeech]
+    private static let familyDisplayOrder: [ModelFamily] = [.senseVoice, .appleSpeech]
     private static let cachedModelsByFamily: [(family: ModelFamily, models: [ModelInfo])] = {
         let grouped = Dictionary(grouping: availableModels, by: \.family)
         return familyDisplayOrder.compactMap { family in
@@ -144,7 +123,6 @@ struct ModelInfo: Identifiable, Hashable {
 
 enum SherpaModelType: String, Codable, Sendable {
     case senseVoice
-    case parakeetTransducer
 }
 
 struct SherpaModelConfig: Hashable, Sendable {
@@ -155,18 +133,10 @@ struct SherpaModelConfig: Hashable, Sendable {
     // SenseVoice
     var senseVoiceModel: String?
 
-    // Transducer (Parakeet TDT)
-    var encoder: String?
-    var decoder: String?
-    var joiner: String?
-
     /// All files needed for this model (used for individual file downloads).
     var allFiles: [String] {
         var files = [tokens]
         if let m = senseVoiceModel { files.append(m) }
-        if let e = encoder { files.append(e) }
-        if let d = decoder { files.append(d) }
-        if let j = joiner { files.append(j) }
         return files
     }
 }

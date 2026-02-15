@@ -64,7 +64,7 @@ class AllModelsTranscribeTest {
         assertTrue(downloader.isModelDownloaded(model), "[$modelId] Model should be downloaded")
 
         // 2. Create engine
-        val engine = SherpaOnnxEngine(modelType = model.sherpaModelType!!)
+        val engine = SherpaOnnxEngine()
         currentEngine = engine
 
         // 3. Load model

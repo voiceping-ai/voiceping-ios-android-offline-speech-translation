@@ -25,7 +25,6 @@ fi
 
 ALL_MODELS=(
     "sensevoice-small"
-    "parakeet-tdt-v3"
     "apple-speech"
 )
 
@@ -42,7 +41,6 @@ get_wait_time() {
     case "$model" in
         whisper-large-v3-turbo*|omnilingual-300m) echo 480 ;;
         whisper-small) echo 300 ;;
-        parakeet-tdt-v3) echo 900 ;;
         whisper-base) echo 240 ;;
         *) echo 120 ;;
     esac
@@ -61,7 +59,6 @@ XCUI_METHODS=(
     sensevoice-small test_sensevoiceSmall
     zipformer-20m test_zipformer20m
     omnilingual-300m test_omnilingual300m
-    parakeet-tdt-v3 test_parakeetTdtV3
     apple-speech test_appleSpeech
 )
 

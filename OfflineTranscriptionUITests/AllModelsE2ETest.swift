@@ -16,7 +16,6 @@ final class AllModelsE2ETest: XCTestCase {
     // Must be larger than app-side polling timeout (TranscriptionView auto-test)
     private func timeout(for modelId: String) -> TimeInterval {
         switch modelId {
-        case let id where id.contains("parakeet"): return 900
         case let id where id.contains("large"): return 480
         case let id where id.contains("300m"): return 360
         case let id where id.contains("small"): return 300
@@ -37,7 +36,6 @@ final class AllModelsE2ETest: XCTestCase {
     func test_sensevoiceSmall() { testModel("sensevoice-small") }
     func test_zipformer20m() { testModel("zipformer-20m") }
     func test_omnilingual300m() { testModel("omnilingual-300m") }
-    func test_parakeetTdtV3() { testModel("parakeet-tdt-v3") }
     func test_appleSpeech() { testModel("apple-speech") }
 
     // MARK: - Core test logic

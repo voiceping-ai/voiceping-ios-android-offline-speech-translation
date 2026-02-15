@@ -53,13 +53,11 @@ enum ASREngineType: String, Codable, Sendable {
 
 enum ModelFamily: String, Codable, Sendable, Hashable {
     case senseVoice
-    case parakeet
     case appleSpeech
 
     var displayName: String {
         switch self {
         case .senseVoice: "SenseVoice"
-        case .parakeet: "Parakeet"
         case .appleSpeech: "Apple Speech"
         }
     }
