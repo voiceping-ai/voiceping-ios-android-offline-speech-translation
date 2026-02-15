@@ -7,7 +7,7 @@ This repository currently ships a focused model set per platform.
 
 | Home | Transcription + Translation | Demo |
 |---|---|---|
-| ![iOS Home](docs/screenshots/ios-home.png) | ![iOS Transcription + Translation](docs/screenshots/ios-transcription.png) | [![iOS File Transcription Demo](docs/screenshots/ios-file-transcription-demo.gif)](docs/demos/ios-file-transcription-demo.mp4) |
+| <img src="docs/screenshots/ios-home.png" width="300" alt="iOS Home"> | <img src="docs/screenshots/ios-transcription.png" width="300" alt="iOS Transcription + Translation"> | <a href="docs/demos/ios-file-transcription-demo.mp4"><img src="docs/screenshots/ios-file-transcription-demo.gif" width="300" alt="iOS File Transcription Demo"></a> |
 
 > SenseVoice Small with Apple Translation (English → Japanese) and TTS. Full video: [MP4](docs/demos/ios-file-transcription-demo.mp4).
 
@@ -15,7 +15,7 @@ This repository currently ships a focused model set per platform.
 
 | Transcription + Translation | Demo |
 |---|---|
-| ![Android Transcription + Translation](docs/screenshots/android_transcribe_translate.png) | [![Android Speech Translation Demo](docs/demos/android_speech_translation_demo.gif)](docs/demos/android_speech_translation_demo.mp4) |
+| <img src="docs/screenshots/android_transcribe_translate.png" width="300" alt="Android Transcription + Translation"> | <a href="docs/demos/android_speech_translation_demo.mp4"><img src="docs/demos/android_speech_translation_demo.gif" width="300" alt="Android Speech Translation Demo"></a> |
 
 > SenseVoice Small with ML Kit Translation and TTS. Full video: [MP4](docs/demos/android_speech_translation_demo.mp4).
 
@@ -70,7 +70,7 @@ Both platforms support transcribing audio from other apps (music, video calls, e
 in addition to microphone input. The user switches between **Voice** and **System** modes
 with a segmented control / chip selector above the record button.
 
-![iOS System Mode (ReplayKit Broadcast)](docs/screenshots/ios-system-recording.png)
+<img src="docs/screenshots/ios-system-recording.png" width="400" alt="iOS System Mode (ReplayKit Broadcast)">
 
 > iOS System mode — the red **Start System Broadcast** button replaces the mic button when System is selected.
 
